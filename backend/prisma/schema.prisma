@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CASHIER
+}
+
+enum StudentStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+enum CardStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum FingerPosition {
+  RIGHT_THUMB
+  RIGHT_INDEX
+  LEFT_THUMB
+  LEFT_INDEX
+  OTHER
+}
+
+enum FinancialEventType {
+  TEST_CREDIT
+  PURCHASE
+  REVERSAL
+}
+
+enum FinancialEventStatus {
+  POSTED
+  REVERSED
+}
+
+enum LedgerAccountType {
+  STUDENT_WALLET
+  CANTEEN_ACCOUNT
+  SYSTEM_TEST_FUND
+}
+
+enum LedgerEntrySide {
+  DEBIT
+  CREDIT
+}
+
+model User {
+  id             String           @id @default(uuid())
+  email          String           @unique
+  passwordHash   String
+  name           String
+  role           UserRole
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  createdEvents  FinancialEvent[] @relation("EventCreator")
+}
+
+model School {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  classes   Class[]
+  students  Student[]
+  canteens  Canteen[]
+}
+
+model Class {
+  id        String    @id @default(uuid())
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  name      String
+  createdAt DateTime  @default(now())
+  students  Student[]
+
+  @@unique([schoolId, name])
+}
+
+model Student {
+  id             String        @id @default(uuid())
+  studentCode    String        @unique
+  firstName      String
+  lastName       String
+  schoolId       String
+  school         School        @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  classId        String
+  class          Class         @relation(fields: [classId], references: [id], onDelete: Restrict)
+  status         StudentStatus @default(ACTIVE)
+  pinHash        String?
+  pinEnabled     Boolean       @default(false)
+  pinFailedCount Int           @default(0)
+  pinLockedUntil DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  wallet         Wallet?
+  cards          NfcCard[]
+  fingerprints   FingerprintTemplate[]
+  events         FinancialEvent[]
+
+  @@index([lastName, firstName])
+  @@index([schoolId, classId])
+}
+
+model Wallet {
+  id         String        @id @default(uuid())
+  studentId  String        @unique
+  student    Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  balanceRwf Int           @default(0)
+  updatedAt  DateTime      @updatedAt
+  events     FinancialEvent[] @relation("WalletEvents")
+  entries    LedgerEntry[]
+}
+
+model Canteen {
+  id        String          @id @default(uuid())
+  name      String
+  schoolId  String
+  school    School          @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  account   CanteenAccount?
+  events    FinancialEvent[]
+
+  @@unique([schoolId, name])
+}
+
+model CanteenAccount {
+  id         String        @id @default(uuid())
+  canteenId  String        @unique
+  canteen    Canteen       @relation(fields: [canteenId], references: [id], onDelete: Restrict)
+  balanceRwf Int           @default(0)
+  updatedAt  DateTime      @updatedAt
+  entries    LedgerEntry[]
+}
+
+model FingerprintTemplate {
+  id           String         @id @default(uuid())
+  studentId    String
+  student      Student        @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  finger       FingerPosition @default(RIGHT_INDEX)
+  template     String
+  deviceModel  String         @default("Live20R")
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([studentId, finger])
+  @@index([studentId, isActive])
+}
+
+model NfcCard {
+  id            String     @id @default(uuid())
+  cardUid       String
+  authTokenHash String
+  studentId     String
+  student       Student    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  status        CardStatus @default(ACTIVE)
+  blockedAt     DateTime?
+  blockedReason String?
+  replacedById  String?    @unique
+  replacedBy    NfcCard?   @relation("CardReplacement", fields: [replacedById], references: [id])
+  replaces      NfcCard?   @relation("CardReplacement")
+  createdAt     DateTime   @default(now())
+  events        FinancialEvent[]
+
+  @@index([cardUid])
+  @@index([studentId, status])
+}
+
+model FinancialEvent {
+  id              String                @id @default(uuid())
+  type            FinancialEventType
+  status          FinancialEventStatus  @default(POSTED)
+  amountRwf       Int
+  description     String?
+  idempotencyKey  String                @unique
+  studentId       String?
+  student         Student?              @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  walletId        String?
+  wallet          Wallet?               @relation("WalletEvents", fields: [walletId], references: [id], onDelete: Restrict)
+  canteenId       String?
+  canteen         Canteen?              @relation(fields: [canteenId], references: [id], onDelete: Restrict)
+  cardId          String?
+  card            NfcCard?              @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  createdById     String
+  createdBy       User                  @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reversesEventId String?               @unique
+  reversesEvent   FinancialEvent?       @relation("EventReversal", fields: [reversesEventId], references: [id])
+  reversedBy      FinancialEvent?       @relation("EventReversal")
+  createdAt       DateTime              @default(now())
+  entries         LedgerEntry[]
+
+  @@index([createdAt])
+  @@index([studentId])
+  @@index([canteenId])
+  @@index([type, status])
+}
+
+model LedgerEntry {
+  id               String            @id @default(uuid())
+  eventId          String
+  event            FinancialEvent    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  accountType      LedgerAccountType
+  side             LedgerEntrySide
+  amountRwf        Int
+  walletId         String?
+  wallet           Wallet?           @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  canteenAccountId String?
+  canteenAccount   CanteenAccount?   @relation(fields: [canteenAccountId], references: [id], onDelete: Restrict)
+  createdAt        DateTime          @default(now())
+
+  @@index([eventId])
+  @@index([walletId])
+  @@index([canteenAccountId])
+}
+
+model IdempotencyRecord {
+  key       String   @id
+  statusCode Int
+  body      Json
+  createdAt DateTime @default(now())
+}
