@@ -249,19 +249,10 @@ describe('FinanceService', () => {
     expect(db.wallets.get(walletId)!.balanceRwf).toBe(10000);
   });
 
-  it('rejects invalid PIN attempts and rate-limits lockout', async () => {
-    for (let i = 0; i < 5; i += 1) {
-      await expect(buy({ pin: '0000', idempotencyKey: `pin-${i}` })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-    }
-    const student = db.students.get(studentId)!;
-    expect(student.pinFailedCount).toBe(5);
-    expect(student.pinLockedUntil).toBeInstanceOf(Date);
-    await expect(buy({ pin: '2468', idempotencyKey: 'pin-locked' })).rejects.toThrow(
-      /PIN is locked/,
-    );
-    expect(db.events.size).toBe(0);
+  it('takes a fingerprint payment without a PIN', async () => {
+    const result = await buy({ pin: undefined, identifiedBy: 'FINGERPRINT', idempotencyKey: 'fp-pay' });
+    expect(result.wallet.balanceRwf).toBe(7500);
+    expect(db.events.size).toBe(1);
   });
 
   it('records a test credit in a balanced ledger', async () => {

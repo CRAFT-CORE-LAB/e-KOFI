@@ -4,7 +4,9 @@ import '../api/api_client.dart';
 import '../models.dart';
 
 class SessionController extends ChangeNotifier {
-  SessionController(this.api);
+  SessionController(this.api) {
+    api.onAuthLost = notifyListeners;
+  }
 
   final ApiClient api;
 
@@ -15,6 +17,7 @@ class SessionController extends ChangeNotifier {
   AuthUser? get user => api.user;
   bool get isLoggedIn => api.token != null && api.user != null;
   bool get isAdmin => user?.isAdmin ?? false;
+  bool get isCanteen => user?.isCanteen ?? false;
 
   Future<void> bootstrap() async {
     try {
@@ -50,6 +53,33 @@ class SessionController extends ChangeNotifier {
     }
   }
 
+  Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+  }) async {
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await api.register(name: name, email: email, password: password, role: role);
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) {
+        throw Exception('This email is already registered. Sign in instead.');
+      }
+      throw Exception(e.message);
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> changeEmail({required String email, required String password}) async {
+    await api.changeEmail(email: email, password: password);
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await api.logout();
     notifyListeners();
@@ -57,6 +87,11 @@ class SessionController extends ChangeNotifier {
 
   Future<void> updateApiUrl(String url) async {
     await api.setBaseUrl(url);
+    notifyListeners();
+  }
+
+  Future<void> updateScannerUrl(String url) async {
+    await api.setScannerUrl(url);
     notifyListeners();
   }
 }

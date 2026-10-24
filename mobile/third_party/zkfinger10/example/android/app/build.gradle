@@ -1,0 +1,80 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+android {
+    namespace "com.example.zkfinger10_example"
+    compileSdk 34
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId "com.example.zkfinger10_example"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion 34
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig signingConfigs.debug
+
+            //Add these lines when releasing your app
+            minifyEnabled false
+            shrinkResources false
+
+            ///KEEP in mind, flutter run --release doesn't add flutter so files to all archs
+            ///If you don't filter for x86 it won't work even all archs have flutter so files, cause, flutter doesn't add so files to x86
+            //Only way to get fully functional apk for x86: run flutter apk release build and add these filters with above details
+            ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
+        }
+        debug {
+            //Can't test fingerprint on x86 debug
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation 'androidx.annotation:annotation:1.8.2'
+    implementation 'androidx.core:core:1.13.1'
+
+    // Flutter embedding dependencies - only debug for now
+    debugImplementation 'io.flutter:flutter_embedding_debug:1.0.0-1e9a811bf8e70466596bcf0ea3a8b5adb5f17f7f'
+    profileImplementation 'io.flutter:flutter_embedding_profile:1.0.0-1e9a811bf8e70466596bcf0ea3a8b5adb5f17f7f'
+    releaseImplementation 'io.flutter:flutter_embedding_release:1.0.0-1e9a811bf8e70466596bcf0ea3a8b5adb5f17f7f'
+}

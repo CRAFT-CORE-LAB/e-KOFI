@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'api/api_client.dart';
-import 'screens/login_screen.dart';
-import 'screens/shell_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'state/session.dart';
 import 'theme.dart';
+import 'widgets.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +25,18 @@ class EkofiApp extends StatelessWidget {
         title: 'e-KOFI',
         debugShowCheckedModeBanner: false,
         theme: ekofiTheme(),
+        builder: (context, child) {
+          return ColoredBox(
+            color: canvas,
+            child: Stack(
+              children: [
+                const Positioned.fill(child: AppGridBackground(lively: true)),
+                const Positioned.fill(child: BrandWatermark()),
+                child ?? const SizedBox.shrink(),
+              ],
+            ),
+          );
+        },
         home: const _Gate(),
       ),
     );
@@ -37,9 +49,9 @@ class _Gate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
-    if (session.ready && session.isLoggedIn) {
-      return const ShellScreen();
+    if (!session.ready) {
+      return const Scaffold(body: LoadingView());
     }
-    return const LoginScreen();
+    return const WelcomeScreen();
   }
 }

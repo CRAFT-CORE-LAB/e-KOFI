@@ -4,6 +4,14 @@ import { StudentStatus } from '@prisma/client';
 export class UpdateStudentDto {
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{1,31}$/, {
+    message: 'Student ID must be 2 to 32 letters, numbers, dots, dashes, or underscores',
+  })
+  studentCode?: string;
+
+  @IsOptional()
+  @IsString()
   @MinLength(1)
   firstName?: string;
 

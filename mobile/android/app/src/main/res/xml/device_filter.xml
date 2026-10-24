@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ZKTeco Live20R / SLK20R -->
+    <!-- ZKTeco Live20R / SLK20R (0x1B55:0x0120) and Live10R (0x1B55:0x0124) -->
+    <usb-device vendor-id="6997" product-id="288" />
+    <usb-device vendor-id="6997" product-id="292" />
     <usb-device vendor-id="6997" product-id="289" />
     <usb-device vendor-id="6997" product-id="290" />
 </resources>

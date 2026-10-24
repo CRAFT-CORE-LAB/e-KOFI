@@ -34,6 +34,7 @@ enum FinancialEventType {
   TEST_CREDIT
   PURCHASE
   REVERSAL
+  CANTEEN_WITHDRAWAL
 }
 
 enum FinancialEventStatus {
@@ -45,6 +46,7 @@ enum LedgerAccountType {
   STUDENT_WALLET
   CANTEEN_ACCOUNT
   SYSTEM_TEST_FUND
+  INTOUCH_PAYOUT
 }
 
 enum LedgerEntrySide {

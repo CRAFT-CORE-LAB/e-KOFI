@@ -12,6 +12,7 @@ class AuthUser {
   final String role;
 
   bool get isAdmin => role == 'ADMIN';
+  bool get isCanteen => role == 'CASHIER';
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as String,
@@ -193,15 +194,17 @@ class FingerprintRecord {
     }
   }
 
-  factory FingerprintRecord.fromJson(Map<String, dynamic> json) => FingerprintRecord(
-    id: json['id'] as String,
-    studentId: json['studentId'] as String,
-    finger: json['finger'] as String? ?? 'RIGHT_INDEX',
-    deviceModel: json['deviceModel'] as String? ?? 'Live20R',
-    student: json['student'] is Map<String, dynamic>
-        ? Student.fromJson(json['student'] as Map<String, dynamic>)
-        : null,
-  );
+  factory FingerprintRecord.fromJson(Map<String, dynamic> json) {
+    final nested = json['student'];
+    final nestedId = nested is Map<String, dynamic> ? nested['id'] as String? : null;
+    return FingerprintRecord(
+      id: json['id'] as String,
+      studentId: json['studentId'] as String? ?? nestedId ?? '',
+      finger: json['finger'] as String? ?? 'RIGHT_INDEX',
+      deviceModel: json['deviceModel'] as String? ?? 'Live20R',
+      student: nested is Map<String, dynamic> ? Student.fromJson(nested) : null,
+    );
+  }
 }
 
 class LedgerEntry {
@@ -313,6 +316,18 @@ class Canteen {
   );
 }
 
+class PeriodTotal {
+  const PeriodTotal({required this.count, required this.amountRwf});
+
+  final int count;
+  final int amountRwf;
+
+  factory PeriodTotal.fromJson(Map<String, dynamic>? json) => PeriodTotal(
+    count: json?['count'] as int? ?? 0,
+    amountRwf: json?['amountRwf'] as int? ?? 0,
+  );
+}
+
 class DashboardStats {
   const DashboardStats({
     required this.students,
@@ -322,6 +337,10 @@ class DashboardStats {
     this.enrolledFingerprints = 0,
     required this.postedPurchases,
     required this.purchaseVolumeRwf,
+    this.canteenBalanceRwf = 0,
+    this.hours6 = const PeriodTotal(count: 0, amountRwf: 0),
+    this.hours24 = const PeriodTotal(count: 0, amountRwf: 0),
+    this.days7 = const PeriodTotal(count: 0, amountRwf: 0),
     required this.recent,
   });
 
@@ -332,20 +351,31 @@ class DashboardStats {
   final int enrolledFingerprints;
   final int postedPurchases;
   final int purchaseVolumeRwf;
+  final int canteenBalanceRwf;
+  final PeriodTotal hours6;
+  final PeriodTotal hours24;
+  final PeriodTotal days7;
   final List<LedgerEvent> recent;
 
-  factory DashboardStats.fromJson(Map<String, dynamic> json) => DashboardStats(
-    students: json['students'] as int? ?? 0,
-    activeStudents: json['activeStudents'] as int? ?? 0,
-    canteens: json['canteens'] as int? ?? 0,
-    activeCards: json['activeCards'] as int? ?? 0,
-    enrolledFingerprints: json['enrolledFingerprints'] as int? ?? json['activeCards'] as int? ?? 0,
-    postedPurchases: json['postedPurchases'] as int? ?? 0,
-    purchaseVolumeRwf: json['purchaseVolumeRwf'] as int? ?? 0,
-    recent: (json['recent'] as List<dynamic>? ?? [])
-        .map((e) => LedgerEvent.fromJson(e as Map<String, dynamic>))
-        .toList(),
-  );
+  factory DashboardStats.fromJson(Map<String, dynamic> json) {
+    final periods = json['periods'] is Map<String, dynamic> ? json['periods'] as Map<String, dynamic> : null;
+    return DashboardStats(
+      students: json['students'] as int? ?? 0,
+      activeStudents: json['activeStudents'] as int? ?? 0,
+      canteens: json['canteens'] as int? ?? 0,
+      activeCards: json['activeCards'] as int? ?? 0,
+      enrolledFingerprints: json['enrolledFingerprints'] as int? ?? json['activeCards'] as int? ?? 0,
+      postedPurchases: json['postedPurchases'] as int? ?? 0,
+      purchaseVolumeRwf: json['purchaseVolumeRwf'] as int? ?? 0,
+      canteenBalanceRwf: json['canteenBalanceRwf'] as int? ?? 0,
+      hours6: PeriodTotal.fromJson(periods?['hours6'] as Map<String, dynamic>?),
+      hours24: PeriodTotal.fromJson(periods?['hours24'] as Map<String, dynamic>?),
+      days7: PeriodTotal.fromJson(periods?['days7'] as Map<String, dynamic>?),
+      recent: (json['recent'] as List<dynamic>? ?? [])
+          .map((e) => LedgerEvent.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }
 
 class WalletDetail {

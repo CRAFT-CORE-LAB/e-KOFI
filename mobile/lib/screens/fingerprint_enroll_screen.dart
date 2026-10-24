@@ -26,7 +26,7 @@ class FingerprintEnrollScreen extends StatefulWidget {
 class _FingerprintEnrollScreenState extends State<FingerprintEnrollScreen> {
   final scanner = Live20RScanner();
   String finger = 'RIGHT_INDEX';
-  String status = 'Plug the fingerprint reader into this phone, then tap Connect.';
+  String status = 'Plug the reader into this phone or the computer, then tap Connect.';
   bool connected = false;
   bool working = false;
   Uint8List? preview;
@@ -54,7 +54,6 @@ class _FingerprintEnrollScreenState extends State<FingerprintEnrollScreen> {
       status = 'Looking for the Live20R reader…';
     });
     try {
-      await scanner.connect();
       await statusSub?.cancel();
       await imageSub?.cancel();
       statusSub = scanner.status.listen((message) {
@@ -63,10 +62,13 @@ class _FingerprintEnrollScreenState extends State<FingerprintEnrollScreen> {
       imageSub = scanner.images.listen((bytes) {
         if (mounted) setState(() => preview = bytes);
       });
+      await scanner.connect();
       if (mounted) {
         setState(() {
           connected = true;
-          status = 'Reader is ready. Ask the student to place a finger on the glass.';
+          status = scanner.onPhone
+              ? 'Phone reader is ready. Ask the student to place a finger on the glass.'
+              : 'Computer reader is ready. Ask the student to place a finger on the glass.';
         });
       }
     } catch (error) {
@@ -118,11 +120,11 @@ class _FingerprintEnrollScreenState extends State<FingerprintEnrollScreen> {
         children: [
           Text(
             widget.studentName,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: navy),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: navy),
           ),
           const SizedBox(height: 6),
           const Text(
-            'Use the Live20R USB fingerprint reader. Connect it with an OTG adapter, then capture one finger.',
+            'Plug the Live20R into this phone with a USB OTG adapter, or into the computer on the same Wi-Fi. Then capture one finger.',
             style: TextStyle(color: muted, height: 1.4),
           ),
           const SizedBox(height: 16),

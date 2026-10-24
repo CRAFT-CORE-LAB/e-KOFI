@@ -2,6 +2,13 @@ import { IsBoolean, IsOptional, IsString, IsUUID, Matches, MinLength } from 'cla
 
 export class CreateStudentDto {
   @IsString()
+  @MinLength(2)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{1,31}$/, {
+    message: 'Student ID must be 2 to 32 letters, numbers, dots, dashes, or underscores',
+  })
+  studentCode!: string;
+
+  @IsString()
   @MinLength(1)
   firstName!: string;
 

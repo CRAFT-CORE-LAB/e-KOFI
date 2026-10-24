@@ -528,10 +528,9 @@ packages:
   zkfinger10:
     dependency: "direct main"
     description:
-      name: zkfinger10
-      sha256: "478a22cdd3e7952e98ed18be02171a3af187bf72d5e2f623409071e5e61fc5be"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/zkfinger10"
+      relative: true
+    source: path
     version: "1.0.0+2"
 sdks:
   dart: ">=3.12.2 <4.0.0"

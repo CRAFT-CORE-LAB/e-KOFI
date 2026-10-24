@@ -21,18 +21,14 @@ class PurchaseScreen extends StatefulWidget {
 class _PurchaseScreenState extends State<PurchaseScreen> {
   final scanner = Live20RScanner();
   final amount = TextEditingController();
-  final pin = TextEditingController();
   List<Student> students = [];
   List<Canteen> canteens = [];
   Map<String, String> templates = {};
-  String? studentId;
   String? canteenId;
   bool loading = true;
-  bool saving = false;
-  bool scanning = false;
+  bool working = false;
   bool connected = false;
-  String status = 'Plug the Live20R into this phone, then tap Connect reader.';
-  String? result;
+  String status = 'Enter the meal amount, then take the student’s fingerprint.';
   Uint8List? preview;
   StreamSubscription<String>? statusSub;
   StreamSubscription<Uint8List>? imageSub;
@@ -49,7 +45,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     imageSub?.cancel();
     scanner.disconnect();
     amount.dispose();
-    pin.dispose();
     super.dispose();
   }
 
@@ -58,8 +53,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     try {
       students = await api.students(status: 'ACTIVE');
       canteens = await api.canteens();
-      templates = await api.fingerprintSync();
       canteenId ??= canteens.firstOrNull?.id;
+      try {
+        templates = await api.fingerprintSync();
+      } on ApiException catch (e) {
+        if (e.statusCode != 401 && mounted) showError(context, e);
+      }
     } on ApiException catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -67,16 +66,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
-  Student? get selected =>
-      students.where((s) => s.id == studentId).firstOrNull;
+  int? get parsedAmount => int.tryParse(amount.text.trim());
 
   Future<void> _connect() async {
     setState(() {
-      scanning = true;
+      working = true;
       status = 'Looking for the Live20R reader…';
     });
     try {
-      await scanner.connect();
       await statusSub?.cancel();
       await imageSub?.cancel();
       statusSub = scanner.status.listen((message) {
@@ -85,94 +82,89 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       imageSub = scanner.images.listen((bytes) {
         if (mounted) setState(() => preview = bytes);
       });
+      await scanner.connect();
       if (mounted) {
         setState(() {
           connected = true;
-          status = 'Reader is ready. Ask the student to place a finger on the glass.';
+          status = 'Amount first. Then the student places a finger on the glass.';
         });
       }
     } catch (error) {
       if (mounted) {
         setState(() => status = '$error');
-        showError(context, error);
+        await showPaymentBurst(context, ok: false, title: 'Reader not ready', message: '$error');
       }
     } finally {
-      if (mounted) setState(() => scanning = false);
+      if (mounted) setState(() => working = false);
     }
   }
 
-  Future<void> _scan() async {
+  Future<void> _payWithFingerprint() async {
+    final meal = parsedAmount;
+    if (meal == null || meal < 1) {
+      await showPaymentBurst(
+        context,
+        ok: false,
+        title: 'Amount needed',
+        message: 'Enter the meal amount before the student uses the fingerprint reader.',
+      );
+      return;
+    }
+    if (canteenId == null) {
+      await showPaymentBurst(context, ok: false, title: 'Choose a canteen', message: 'Pick the canteen taking this payment.');
+      return;
+    }
+    if (!connected) {
+      await _connect();
+      if (!mounted || !connected) return;
+    }
     setState(() {
-      scanning = true;
-      result = null;
-      status = 'Place a finger on the reader…';
+      working = true;
+      status = 'Student: place a finger on the glass.';
     });
     try {
-      templates = await context.read<SessionController>().api.fingerprintSync();
+      final api = context.read<SessionController>().api;
+      templates = await api.fingerprintSync();
+      if (!mounted) return;
       final identified = await scanner.identify(templates: templates);
       final matchedId = identified.split('::').first;
       if (!mounted) return;
       var match = students.where((s) => s.id == matchedId).firstOrNull;
       if (match == null) {
-        students = await context.read<SessionController>().api.students(status: 'ACTIVE');
+        students = await api.students(status: 'ACTIVE');
         match = students.where((s) => s.id == matchedId).firstOrNull;
       }
       if (match == null) {
         throw Exception('This fingerprint is not linked to an active student.');
       }
-      setState(() {
-        studentId = match!.id;
-        status = 'Recognised ${match.fullName}. Enter the meal amount.';
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(() => status = '$error');
-        showError(context, error);
-      }
-    } finally {
-      if (mounted) setState(() => scanning = false);
-    }
-  }
-
-  Future<void> _pay() async {
-    if (studentId == null) {
-      showError(context, 'Identify the student with a fingerprint first.');
-      return;
-    }
-    if (canteenId == null) {
-      showError(context, 'Choose a canteen first.');
-      return;
-    }
-    final parsed = int.tryParse(amount.text.trim());
-    if (parsed == null || parsed < 1) {
-      showError(context, 'Enter a valid meal amount.');
-      return;
-    }
-    setState(() => saving = true);
-    try {
-      final posted = await context.read<SessionController>().api.purchase({
-        'amountRwf': parsed,
+      setState(() => status = 'Recognised ${match!.studentCode} · ${match.fullName}. Taking payment…');
+      final posted = await api.purchase({
+        'amountRwf': meal,
         'canteenId': canteenId,
-        'studentId': studentId,
-        if (pin.text.isNotEmpty) 'pin': pin.text,
+        'studentId': match.id,
         'description': 'Canteen meal',
         'identifiedBy': 'FINGERPRINT',
       });
-      setState(() {
-        final remaining = posted.wallet != null ? rwf(posted.wallet!.balanceRwf) : '—';
-        result = posted.duplicate
-            ? 'This payment was already taken. Wallet still $remaining.'
-            : 'Payment complete. Remaining $remaining.';
-        studentId = null;
-        status = 'Ready for the next student. Place a finger on the reader.';
-      });
+      final remaining = posted.wallet != null ? rwf(posted.wallet!.balanceRwf) : '—';
       amount.clear();
-      pin.clear();
+      if (!mounted) return;
+      await showPaymentBurst(
+        context,
+        ok: true,
+        title: posted.duplicate ? 'Already taken' : 'Payment successful',
+        message: posted.duplicate
+            ? '${match.fullName} was already charged. Wallet still $remaining.'
+            : '${match.studentCode} · ${match.fullName}\n${rwf(meal)} paid.\nWallet left $remaining.',
+      );
+      setState(() => status = 'Ready for the next meal. Enter the amount, then take a fingerprint.');
       await _load();
-    } on ApiException catch (e) {
-      if (mounted) showError(context, e);
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = '$error');
+        await showPaymentBurst(context, ok: false, title: 'Payment failed', message: '$error');
+      }
     } finally {
-      if (mounted) setState(() => saving = false);
+      if (mounted) setState(() => working = false);
     }
   }
 
@@ -192,19 +184,19 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Text(
-                          'Pay by fingerprint',
+                          'Amount, then fingerprint',
                           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: navy),
                         ),
                         const SizedBox(height: 6),
                         const Text(
-                          'Plug the Live20R into this phone. The student places a finger on the glass — no card is needed.',
+                          'Type the meal amount first. The student’s fingerprint confirms who pays. No PIN is used.',
                           style: TextStyle(color: muted, height: 1.4),
                         ),
                         const SizedBox(height: 16),
                         Container(
                           height: 160,
                           decoration: BoxDecoration(
-                            color: canvas,
+                            color: canvas.withValues(alpha: 0.7),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           alignment: Alignment.center,
@@ -221,33 +213,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: navy, height: 1.4),
                         ),
-                        const SizedBox(height: 16),
-                        if (!connected)
-                          FilledButton.icon(
-                            onPressed: scanning ? null : _connect,
-                            icon: const Icon(Icons.usb),
-                            label: Text(scanning ? 'Connecting…' : 'Connect reader'),
-                          )
-                        else
-                          FilledButton.icon(
-                            onPressed: scanning ? null : _scan,
-                            icon: const Icon(Icons.fingerprint),
-                            label: Text(scanning ? 'Waiting for fingerprint…' : 'Identify student'),
-                          ),
-                        if (selected != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            'Paying for ${selected!.fullName}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w700, color: navy),
-                          ),
-                          Text(
-                            'Available ${selected!.wallet != null ? rwf(selected!.wallet!.balanceRwf) : '—'}'
-                            '${selected!.pinEnabled ? ' · PIN needed' : ''}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: muted),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -259,38 +224,28 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   items: canteens
                       .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
                       .toList(),
-                  onChanged: (value) => setState(() => canteenId = value),
+                  onChanged: working ? null : (value) => setState(() => canteenId = value),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: amount,
+                  enabled: !working,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Amount (RWF)'),
+                  decoration: const InputDecoration(labelText: 'Amount the student will pay (RWF)'),
                 ),
-                if (selected?.pinEnabled == true) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: pin,
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Student PIN'),
-                  ),
-                ],
                 const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: saving ? null : _pay,
-                  child: Text(saving ? 'Taking payment…' : 'Confirm payment'),
-                ),
-                if (result != null) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    color: teal.withValues(alpha: 0.12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(result!, style: const TextStyle(color: navy, height: 1.4)),
-                    ),
+                if (!connected)
+                  FilledButton.icon(
+                    onPressed: working ? null : _connect,
+                    icon: const Icon(Icons.usb),
+                    label: Text(working ? 'Connecting…' : 'Connect reader'),
                   ),
-                ],
+                if (connected)
+                  FilledButton.icon(
+                    onPressed: working ? null : _payWithFingerprint,
+                    icon: const Icon(Icons.fingerprint),
+                    label: Text(working ? 'Waiting for fingerprint…' : 'Take fingerprint and pay'),
+                  ),
               ],
             ),
     );

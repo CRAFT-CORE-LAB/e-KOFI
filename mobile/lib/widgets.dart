@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'theme.dart';
 
@@ -10,10 +11,11 @@ class BrandLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/branding/logo.jpg',
+      'assets/branding/logo.png',
       height: height,
       fit: BoxFit.contain,
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.center,
+      filterQuality: FilterQuality.high,
     );
   }
 }
@@ -45,9 +47,9 @@ class BrandWatermark extends StatelessWidget {
     return IgnorePointer(
       child: Stack(
         children: [
-          Positioned(top: -28, right: -36, child: _blob(220, teal.withValues(alpha: 0.10))),
-          Positioned(top: 120, left: -80, child: _blob(180, navy.withValues(alpha: 0.05))),
-          Positioned(bottom: 40, right: -40, child: _blob(160, teal.withValues(alpha: 0.08))),
+          Positioned(top: -28, right: -36, child: _blob(220, teal.withValues(alpha: 0.14))),
+          Positioned(top: 120, left: -80, child: _blob(180, const Color(0xFFE8C39E).withValues(alpha: 0.22))),
+          Positioned(bottom: 40, right: -40, child: _blob(160, teal.withValues(alpha: 0.10))),
           Positioned(top: 72, right: 18, child: _mark(132, 0.055, -16)),
           Positioned(bottom: 120, left: -24, child: _mark(96, 0.04, 12)),
         ],
@@ -69,7 +71,7 @@ class BrandWatermark extends StatelessWidget {
       child: Transform.rotate(
         angle: angle * 3.14159 / 180,
         child: Image.asset(
-          'assets/branding/logo.jpg',
+          'assets/branding/logo.png',
           width: size,
           height: size,
           fit: BoxFit.contain,
@@ -77,6 +79,137 @@ class BrandWatermark extends StatelessWidget {
       ),
     );
   }
+}
+
+class AppGridBackground extends StatefulWidget {
+  const AppGridBackground({super.key, this.lively = false});
+
+  final bool lively;
+
+  @override
+  State<AppGridBackground> createState() => _AppGridBackgroundState();
+}
+
+class _AppGridBackgroundState extends State<AppGridBackground> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return CustomPaint(
+          painter: _GridPainter(t: _controller.value, lively: widget.lively),
+          child: const SizedBox.expand(),
+        );
+      },
+    );
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  _GridPainter({required this.t, required this.lively});
+
+  final double t;
+  final bool lively;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shift = Offset((t * 56) - 28, (t * 40) - 20);
+    final paint = Paint()
+      ..color = navy.withValues(alpha: lively ? 0.07 : 0.035)
+      ..strokeWidth = 1;
+    const step = 28.0;
+    for (double x = -step + shift.dx % step; x <= size.width + step; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = -step + shift.dy % step; y <= size.height + step; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+    if (!lively) return;
+    final spark = Paint()..color = teal.withValues(alpha: 0.16);
+    for (var i = 0; i < 6; i++) {
+      final px = (size.width * ((0.12 * i + t * (i.isEven ? 0.35 : 0.22)) % 1));
+      final py = (size.height * ((0.18 * i + t * (i.isOdd ? 0.4 : 0.15)) % 1));
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(px, py), width: 22, height: 22), const Radius.circular(6)),
+        spark,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GridPainter oldDelegate) => oldDelegate.t != t || oldDelegate.lively != lively;
+}
+
+Future<void> showPaymentBurst(
+  BuildContext context, {
+  required bool ok,
+  required String title,
+  required String message,
+}) {
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Payment result',
+    barrierColor: (ok ? teal : const Color(0xFFB42318)).withValues(alpha: 0.92),
+    transitionDuration: const Duration(milliseconds: 280),
+    pageBuilder: (context, animation, secondary) {
+      return Center(
+        child: ScaleTransition(
+          scale: CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  ok ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                  color: white,
+                  size: 128,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: white, fontSize: 18, height: 1.4),
+                ),
+                const SizedBox(height: 28),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: white, foregroundColor: ok ? teal : const Color(0xFFB42318)),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class InitialsAvatar extends StatelessWidget {
@@ -184,6 +317,125 @@ class EmptyState extends StatelessWidget {
             Text(message, textAlign: TextAlign.center, style: const TextStyle(color: muted, height: 1.4)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class MagicNavItem {
+  const MagicNavItem({required this.icon, required this.selectedIcon, required this.label});
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+}
+
+class MagicNavBar extends StatelessWidget {
+  const MagicNavBar({
+    super.key,
+    required this.index,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final int index;
+  final List<MagicNavItem> items;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        child: Container(
+          height: 72,
+          decoration: BoxDecoration(
+            color: navy,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(color: navy.withValues(alpha: 0.28), blurRadius: 24, offset: const Offset(0, 10)),
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final slot = constraints.maxWidth / items.length;
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 480),
+                    curve: Curves.elasticOut,
+                    left: slot * index + 8,
+                    top: 8,
+                    bottom: 8,
+                    width: slot - 16,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: teal,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      for (var i = 0; i < items.length; i++)
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              onChanged(i);
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: _MagicNavButton(item: items[i], selected: i == index),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MagicNavButton extends StatelessWidget {
+  const _MagicNavButton({required this.item, required this.selected});
+
+  final MagicNavItem item;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: selected ? 1.08 : 1,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutBack,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            child: Icon(
+              selected ? item.selectedIcon : item.icon,
+              key: ValueKey('${item.label}-$selected'),
+              color: white,
+              size: selected ? 24 : 22,
+            ),
+          ),
+          const SizedBox(height: 4),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 220),
+            style: TextStyle(
+              color: white.withValues(alpha: selected ? 1 : 0.72),
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            ),
+            child: Text(item.label),
+          ),
+        ],
       ),
     );
   }

@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "FinancialEventType" ADD VALUE 'CANTEEN_WITHDRAWAL';
+ALTER TYPE "LedgerAccountType" ADD VALUE 'INTOUCH_PAYOUT';

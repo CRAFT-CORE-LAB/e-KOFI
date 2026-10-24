@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../models.dart';
 import '../state/session.dart';
+import '../theme.dart';
 import '../widgets.dart';
 import 'fingerprint_enroll_screen.dart';
 
@@ -17,13 +18,12 @@ class StudentFormScreen extends StatefulWidget {
 }
 
 class _StudentFormScreenState extends State<StudentFormScreen> {
+  final studentCode = TextEditingController();
   final firstName = TextEditingController();
   final lastName = TextEditingController();
-  final pin = TextEditingController();
   List<School> schools = [];
   String? schoolId;
   String? classId;
-  bool pinEnabled = false;
   bool loading = true;
   bool saving = false;
 
@@ -32,9 +32,9 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
     super.initState();
     final existing = widget.existing;
     if (existing != null) {
+      studentCode.text = existing.studentCode;
       firstName.text = existing.firstName;
       lastName.text = existing.lastName;
-      pinEnabled = existing.pinEnabled;
       schoolId = existing.school?.id;
       classId = existing.schoolClass?.id;
     }
@@ -43,9 +43,9 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
 
   @override
   void dispose() {
+    studentCode.dispose();
     firstName.dispose();
     lastName.dispose();
-    pin.dispose();
     super.dispose();
   }
 
@@ -66,15 +66,27 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   }
 
   Future<void> _save() async {
+    final idValue = studentCode.text.trim();
+    if (idValue.length < 2) {
+      showError(context, 'Enter the student ID. This is the main identifier.');
+      return;
+    }
+    if (firstName.text.trim().isEmpty || lastName.text.trim().isEmpty) {
+      showError(context, 'Enter the student’s first and last name.');
+      return;
+    }
+    if (schoolId == null || classId == null) {
+      showError(context, 'Choose a school and class.');
+      return;
+    }
     setState(() => saving = true);
     final api = context.read<SessionController>().api;
     final body = <String, dynamic>{
+      'studentCode': idValue,
       'firstName': firstName.text.trim(),
       'lastName': lastName.text.trim(),
       'schoolId': schoolId,
       'classId': classId,
-      'pinEnabled': pinEnabled || pin.text.isNotEmpty,
-      if (pin.text.isNotEmpty) 'pin': pin.text,
     };
     try {
       if (widget.existing == null) {
@@ -85,14 +97,14 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
           MaterialPageRoute(
             builder: (_) => FingerprintEnrollScreen(
               studentId: created.id,
-              studentName: created.fullName,
+              studentName: '${created.fullName} · ${created.studentCode}',
             ),
           ),
         );
       } else {
         await api.updateStudent(widget.existing!.id, body);
       }
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -110,6 +122,15 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
+                TextField(
+                  controller: studentCode,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Student ID',
+                    hintText: 'e.g. 2024-0148',
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextField(controller: firstName, decoration: const InputDecoration(labelText: 'First name')),
                 const SizedBox(height: 12),
                 TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Last name')),
@@ -138,20 +159,16 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
                       .toList(),
                   onChanged: (value) => setState(() => classId = value),
                 ),
-                SwitchListTile(
-                  title: const Text('Ask for a PIN at payment'),
-                  value: pinEnabled,
-                  onChanged: (value) => setState(() => pinEnabled = value),
-                ),
-                TextField(
-                  controller: pin,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'PIN (4–6 digits, optional)'),
-                ),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: saving ? null : _save,
-                  child: Text(saving ? 'Saving…' : 'Save student'),
+                  child: Text(
+                    saving
+                        ? 'Saving…'
+                        : widget.existing == null
+                        ? 'Save and capture fingerprint'
+                        : 'Save changes',
+                  ),
                 ),
               ],
             ),

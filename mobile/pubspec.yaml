@@ -40,7 +40,8 @@ dependencies:
   uuid: ^4.6.0
   intl: ^0.20.3
   nfc_manager: ^4.2.1
-  zkfinger10: ^1.0.0+2
+  zkfinger10:
+    path: third_party/zkfinger10
 
 dev_dependencies:
   flutter_test:
@@ -65,8 +66,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
+    - assets/branding/logo.png
     - assets/branding/logo.jpg
     - assets/branding/app_icon.png
+    - assets/branding/welcome.png
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
 
 flutter_launcher_icons:
   android: true

@@ -23,3 +23,6 @@ mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
 mobile/.packages
 mobile/build/
+pc-scanner/sdk/
+__pycache__/
+*.pyc

@@ -18,4 +18,9 @@ body {
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
+  background-color: #f3f6fa;
+  background-image:
+    linear-gradient(to right, rgb(11 31 58 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(11 31 58 / 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
 }

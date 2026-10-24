@@ -139,8 +139,6 @@ export class FinanceService {
         throw new BadRequestException('Student could not be resolved');
       }
 
-      await this.verifyPinIfRequired(studentId, input.pin);
-
       return this.prisma.$transaction(
         async (tx) => {
           const duplicate = await this.findDuplicate(tx, input.idempotencyKey);

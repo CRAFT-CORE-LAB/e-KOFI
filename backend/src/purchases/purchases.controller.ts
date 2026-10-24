@@ -16,6 +16,7 @@ export class PurchasesController {
   constructor(private readonly finance: FinanceService) {}
 
   @Post()
+  @Roles(UserRole.CASHIER)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   create(@Body() dto: CreatePurchaseDto, @CurrentUser() user: AuthUser) {
     return this.finance.purchase({
@@ -25,7 +26,7 @@ export class PurchasesController {
   }
 
   @Post(':id/reverse')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.CASHIER)
   reverse(
     @Param('id') id: string,
     @Body() dto: ReversePurchaseDto,

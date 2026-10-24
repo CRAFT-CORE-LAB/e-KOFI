@@ -38,7 +38,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Payment history')),
+      appBar: AppBar(title: const Text('Paid')),
       body: loading
           ? const LoadingView()
           : items.isEmpty
@@ -60,17 +60,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     child: ListTile(
                       leading: InitialsAvatar(name: event.student?.fullName ?? friendlyEvent(event.type)),
                       title: Text(
-                        event.student?.fullName ?? friendlyEvent(event.type),
+                        event.student?.studentCode.isNotEmpty == true
+                            ? event.student!.studentCode
+                            : (event.student?.fullName ?? friendlyEvent(event.type)),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
                         [
+                          if (event.student?.fullName.isNotEmpty == true) event.student!.fullName,
                           friendlyEvent(event.type),
                           if (event.canteenName != null && event.canteenName!.isNotEmpty) event.canteenName,
-                          friendlyStatus(event.status),
+                          if (friendlyWhen(event.createdAt).isNotEmpty) friendlyWhen(event.createdAt),
                         ].join(' · '),
                         style: const TextStyle(color: muted),
                       ),
+                      isThreeLine: true,
                       trailing: Text(rwf(event.amountRwf), style: const TextStyle(fontWeight: FontWeight.w700)),
                       onTap: () => Navigator.push(
                         context,
@@ -112,7 +116,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<SessionController>().isAdmin;
+    final canteen = context.watch<SessionController>().isCanteen;
     final event = this.event;
     return Scaffold(
       appBar: AppBar(title: Text(event == null ? 'Payment' : friendlyEvent(event.type))),
@@ -134,7 +138,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                           style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: navy),
                         ),
                         if (event.student != null)
-                          Text(event.student!.fullName, style: const TextStyle(color: muted)),
+                          Text(
+                            [
+                              if (event.student!.studentCode.isNotEmpty) event.student!.studentCode,
+                              event.student!.fullName,
+                            ].join(' · '),
+                            style: const TextStyle(color: muted),
+                          ),
                         if (event.description != null) ...[
                           const SizedBox(height: 8),
                           Text(event.description!),
@@ -143,7 +153,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                     ),
                   ),
                 ),
-                if (admin && event.status == 'POSTED' && event.type != 'REVERSAL') ...[
+                if (canteen && event.status == 'POSTED' && event.type != 'REVERSAL') ...[
                   const SizedBox(height: 20),
                   OutlinedButton(
                     onPressed: () async {

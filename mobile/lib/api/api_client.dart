@@ -22,12 +22,15 @@ class ApiClient {
   static const _tokenKey = 'ekofi_token';
   static const _userKey = 'ekofi_user';
   static const _urlKey = 'ekofi_api_url';
+  static const _scannerKey = 'ekofi_scanner_url';
 
   final _uuid = const Uuid();
 
   String baseUrl = defaultApiUrl();
+  String scannerUrl = '';
   String? token;
   AuthUser? user;
+  void Function()? onAuthLost;
 
   static const railwayApiUrl = 'https://api-production-240da.up.railway.app/api';
 
@@ -50,6 +53,7 @@ class ApiClient {
     } else {
       baseUrl = saved;
     }
+    scannerUrl = prefs.getString(_scannerKey) ?? '';
     token = prefs.getString(_tokenKey);
     final raw = prefs.getString(_userKey);
     if (raw != null) {
@@ -68,6 +72,12 @@ class ApiClient {
     await prefs.setString(_urlKey, baseUrl);
   }
 
+  Future<void> setScannerUrl(String url) async {
+    scannerUrl = url.trim().replaceAll(RegExp(r'/$'), '');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_scannerKey, scannerUrl);
+  }
+
   Future<AuthUser> login(String email, String password) async {
     final data = await _request(
       'POST',
@@ -79,6 +89,54 @@ class ApiClient {
     user = AuthUser.fromJson(data['user'] as Map<String, dynamic>);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token!);
+    await prefs.setString(_userKey, jsonEncode(user!.toJson()));
+    return user!;
+  }
+
+  Future<AuthUser> register({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/auth/register',
+      body: {
+        'name': name,
+        'email': email,
+        'password': password,
+        'role': role,
+      },
+      auth: false,
+    );
+    token = data['accessToken'] as String;
+    user = AuthUser.fromJson(data['user'] as Map<String, dynamic>);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token!);
+    await prefs.setString(_userKey, jsonEncode(user!.toJson()));
+    return user!;
+  }
+
+  Future<void> changePassword({required String currentPassword, required String newPassword}) {
+    return _request(
+      'POST',
+      '/auth/password',
+      body: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
+    );
+  }
+
+  Future<AuthUser> changeEmail({required String email, required String password}) async {
+    final data = await _request(
+      'POST',
+      '/auth/email',
+      body: {'email': email, 'password': password},
+    );
+    user = AuthUser.fromJson(data['user'] as Map<String, dynamic>);
+    final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userKey, jsonEncode(user!.toJson()));
     return user!;
   }
@@ -122,6 +180,10 @@ class ApiClient {
 
   Future<Student> deactivateStudent(String id) async {
     return Student.fromJson(await _request('POST', '/students/$id/deactivate'));
+  }
+
+  Future<void> deleteStudent(String id) {
+    return _request('DELETE', '/students/$id');
   }
 
   Future<WalletDetail> wallet(String studentId) async {
@@ -259,6 +321,24 @@ class ApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> withdrawCanteen({
+    required String canteenId,
+    required int amountRwf,
+    required String mobilePhone,
+  }) async {
+    return Map<String, dynamic>.from(
+      await _request(
+        'POST',
+        '/canteens/$canteenId/withdraw',
+        body: {
+          'amountRwf': amountRwf,
+          'mobilePhone': mobilePhone,
+          'idempotencyKey': _uuid.v4(),
+        },
+      ) as Map,
+    );
+  }
+
   Future<PurchaseResult> purchase(Map<String, dynamic> body) async {
     return PurchaseResult.fromJson(
       await _request(
@@ -324,6 +404,11 @@ class ApiClient {
       data = jsonDecode(response.body);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (auth && response.statusCode == 401) {
+        await logout();
+        onAuthLost?.call();
+        throw ApiException('Please sign in again.', 401);
+      }
       var message = response.reasonPhrase ?? 'Request failed';
       if (data is Map && data['message'] != null) {
         final value = data['message'];

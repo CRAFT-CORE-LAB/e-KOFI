@@ -34,11 +34,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0B1F3A] px-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white p-8 shadow-sm">
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style={{
+          backgroundImage: "url('/ekofi-logo.jpg')",
+          backgroundRepeat: 'repeat',
+          backgroundSize: '180px',
+        }}
+      />
+      <div className="relative w-full max-w-md rounded-2xl border border-[#0B1F3A]/10 bg-white p-8 shadow-sm">
         <img src="/ekofi-logo.jpg" alt="e-KOFI" className="h-12 w-auto" />
-        <h1 className="mt-5 text-2xl font-semibold text-[#0B1F3A]">Sign in</h1>
-        <p className="mt-2 text-sm text-[#0B1F3A]/70">Safe money. Fast payments. Made for students.</p>
+        <h1 className="mt-5 text-2xl font-semibold text-[#0B1F3A]">Admin portal</h1>
+        <p className="mt-2 text-sm text-[#0B1F3A]/70">Sign in to register students. Meal payments are taken in the canteen portal.</p>
         <form className="mt-6 grid gap-4" onSubmit={onSubmit}>
           <Field label="Email">
             <input className={inputClass} name="email" type="email" defaultValue="admin@ekofi.local" required />

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ const studentInclude = {
     orderBy: { createdAt: 'desc' as const },
     select: {
       id: true,
+      studentId: true,
       finger: true,
       deviceModel: true,
       isActive: true,
@@ -67,7 +69,7 @@ export class StudentsService {
     await this.assertClassBelongsToSchool(dto.classId, dto.schoolId);
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 12) : null;
     const pinEnabled = Boolean(dto.pinEnabled && pinHash);
-    const studentCode = await this.nextStudentCode();
+    const studentCode = await this.ensureUniqueCode(dto.studentCode);
 
     const student = await this.prisma.student.create({
       data: {
@@ -97,6 +99,7 @@ export class StudentsService {
     }
 
     const data: Prisma.StudentUpdateInput = {
+      studentCode: dto.studentCode ? await this.ensureUniqueCode(dto.studentCode, id) : undefined,
       firstName: dto.firstName?.trim(),
       lastName: dto.lastName?.trim(),
       school: dto.schoolId ? { connect: { id: dto.schoolId } } : undefined,
@@ -128,6 +131,30 @@ export class StudentsService {
     return this.update(id, { status: StudentStatus.DEACTIVATED });
   }
 
+  async remove(id: string) {
+    const existing = await this.prisma.student.findUnique({
+      where: { id },
+      include: { wallet: true, _count: { select: { events: true } } },
+    });
+    if (!existing) {
+      throw new NotFoundException('Student not found');
+    }
+    if (existing._count.events > 0) {
+      return this.deactivate(id);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fingerprintTemplate.deleteMany({ where: { studentId: id } });
+      await tx.nfcCard.deleteMany({ where: { studentId: id } });
+      if (existing.wallet) {
+        await tx.wallet.delete({ where: { id: existing.wallet.id } });
+      }
+      await tx.student.delete({ where: { id } });
+    });
+
+    return { id, studentCode: existing.studentCode, removed: true };
+  }
+
   private sanitize<T extends { pinHash: string | null }>(student: T) {
     const { pinHash: _pinHash, ...rest } = student;
     return { ...rest, hasPin: Boolean(student.pinHash) };
@@ -143,13 +170,19 @@ export class StudentsService {
     }
   }
 
-  private async nextStudentCode(): Promise<string> {
-    const last = await this.prisma.student.findFirst({
-      orderBy: { studentCode: 'desc' },
-      select: { studentCode: true },
-    });
-    const lastNumber = last ? Number(last.studentCode.replace(/\D/g, '')) : 0;
-    const next = Number.isFinite(lastNumber) ? lastNumber + 1 : 1;
-    return `STU-${String(next).padStart(6, '0')}`;
+  private normalizeStudentCode(raw: string) {
+    return raw.trim().replace(/\s+/g, '').toUpperCase();
+  }
+
+  private async ensureUniqueCode(raw: string, exceptId?: string) {
+    const studentCode = this.normalizeStudentCode(raw);
+    if (studentCode.length < 2) {
+      throw new BadRequestException('Student ID is required');
+    }
+    const existing = await this.prisma.student.findUnique({ where: { studentCode } });
+    if (existing && existing.id !== exceptId) {
+      throw new ConflictException('This student ID is already registered');
+    }
+    return studentCode;
   }
 }

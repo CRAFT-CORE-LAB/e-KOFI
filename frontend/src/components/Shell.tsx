@@ -6,13 +6,16 @@ import { useEffect, useState } from 'react';
 import { clearSession, getStoredUser } from '@/lib/api';
 import { AuthUser } from '@/lib/types';
 
-const links = [
+const adminLinks = [
   { href: '/', label: 'Dashboard' },
   { href: '/students', label: 'Students' },
-  { href: '/cards', label: 'NFC cards' },
+];
+
+const canteenLinks = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/purchase', label: 'Pay' },
+  { href: '/transactions', label: 'Meals' },
   { href: '/canteens', label: 'Canteens' },
-  { href: '/purchase', label: 'Purchase' },
-  { href: '/transactions', label: 'Transactions' },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -41,7 +44,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <p className="mt-3 text-sm text-white/70">Safe money. Fast payments.</p>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col">
-          {links.map((link) => {
+          {(user.role === 'ADMIN' ? adminLinks : canteenLinks).map((link) => {
             const active = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
             return (
               <Link

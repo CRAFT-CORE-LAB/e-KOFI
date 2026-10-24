@@ -41,7 +41,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<SessionController>().user;
+    final session = context.watch<SessionController>();
+    final user = session.user;
+    final admin = session.isAdmin;
     final name = firstNameOf(user?.name);
     return Scaffold(
       appBar: AppBar(
@@ -85,24 +87,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.28,
-                children: [
-                  _StatCard('Students', '${stats!.students}', '${stats!.activeStudents} active today'),
-                  _StatCard('Fingerprints', '${stats!.enrolledFingerprints}', 'Ready to pay'),
-                  _StatCard('Canteens', '${stats!.canteens}', 'Open counters'),
-                  _StatCard('Meals served', '${stats!.postedPurchases}', rwf(stats!.purchaseVolumeRwf)),
-                ],
+                children: admin
+                    ? [
+                        _StatCard('Students', '${stats!.students}', '${stats!.activeStudents} on the register'),
+                        _StatCard('Fingerprints', '${stats!.enrolledFingerprints}', 'Ready for the canteen'),
+                      ]
+                    : [
+                        _StatCard('Balance', rwf(stats!.canteenBalanceRwf), 'Ready to withdraw'),
+                        _StatCard('Last 6 hours', rwf(stats!.hours6.amountRwf), '${stats!.hours6.count} meals'),
+                        _StatCard('Last 24 hours', rwf(stats!.hours24.amountRwf), '${stats!.hours24.count} meals'),
+                        _StatCard('Last 7 days', rwf(stats!.days7.amountRwf), '${stats!.days7.count} meals'),
+                      ],
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Recent activity',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: navy),
+              Text(
+                admin ? 'Registration' : 'Students who paid',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: navy),
               ),
               const SizedBox(height: 10),
-              if (stats!.recent.isEmpty)
+              if (admin)
+                const EmptyState(
+                  icon: Icons.badge_outlined,
+                  title: 'Register students here',
+                  message: 'Add each student ID, then capture their fingerprint. Meal payments are taken in the canteen app.',
+                )
+              else if (stats!.recent.isEmpty)
                 const EmptyState(
                   icon: Icons.receipt_long_outlined,
-                  title: 'No activity yet',
-                  message: 'Meal payments will appear here as soon as they are taken.',
+                  title: 'No meals yet',
+                  message: 'Payments will appear here as soon as they are taken.',
                 )
               else
                 ...stats!.recent.map(
@@ -112,16 +125,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: ListTile(
                         leading: InitialsAvatar(name: event.student?.fullName ?? 'Meal'),
                         title: Text(
-                          event.student?.fullName ?? friendlyEvent(event.type),
+                          event.student?.studentCode.isNotEmpty == true
+                              ? event.student!.studentCode
+                              : (event.student?.fullName ?? friendlyEvent(event.type)),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(
                           [
+                            if (event.student?.fullName.isNotEmpty == true) event.student!.fullName,
                             friendlyEvent(event.type),
                             if (event.canteenName != null && event.canteenName!.isNotEmpty) event.canteenName,
+                            if (friendlyWhen(event.createdAt).isNotEmpty) friendlyWhen(event.createdAt),
                           ].join(' · '),
                           style: const TextStyle(color: muted),
                         ),
+                        isThreeLine: true,
                         trailing: Text(
                           rwf(event.amountRwf),
                           style: const TextStyle(fontWeight: FontWeight.w700, color: navy),

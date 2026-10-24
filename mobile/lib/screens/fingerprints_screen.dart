@@ -35,6 +35,8 @@ class _FingerprintsScreenState extends State<FingerprintsScreen> {
       students = await context.read<SessionController>().api.students(status: 'ACTIVE');
     } on ApiException catch (e) {
       error = e.message;
+    } catch (e) {
+      error = e.toString();
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -46,7 +48,7 @@ class _FingerprintsScreenState extends State<FingerprintsScreen> {
       MaterialPageRoute(
         builder: (_) => FingerprintEnrollScreen(
           studentId: student.id,
-          studentName: student.fullName,
+          studentName: '${student.fullName} · ${student.studentCode}',
         ),
       ),
     );
@@ -87,7 +89,7 @@ class _FingerprintsScreenState extends State<FingerprintsScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Plug the Live20R into this phone, open a student, and capture their finger. No cards are needed.',
+                    'Plug the Live20R into this phone or the computer, open a student, and capture their finger. No cards are needed.',
                     style: TextStyle(color: muted, height: 1.4),
                   ),
                   const SizedBox(height: 16),
@@ -104,11 +106,14 @@ class _FingerprintsScreenState extends State<FingerprintsScreen> {
                         child: Card(
                           child: ListTile(
                             leading: InitialsAvatar(name: student.fullName),
-                            title: Text(student.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            title: Text(student.studentCode, style: const TextStyle(fontWeight: FontWeight.w800)),
                             subtitle: Text(
-                              student.hasFingerprint
-                                  ? '${student.fingerprints.length} fingerprint${student.fingerprints.length == 1 ? '' : 's'} saved'
-                                  : 'Not registered yet',
+                              [
+                                student.fullName,
+                                student.hasFingerprint
+                                    ? '${student.fingerprints.length} fingerprint${student.fingerprints.length == 1 ? '' : 's'} saved'
+                                    : 'Not registered yet',
+                              ].join(' · '),
                               style: const TextStyle(color: muted),
                             ),
                             trailing: admin

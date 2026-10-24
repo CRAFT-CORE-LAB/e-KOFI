@@ -11,15 +11,15 @@ import { FingerprintsService } from './fingerprints.service';
 export class FingerprintsController {
   constructor(private readonly fingerprints: FingerprintsService) {}
 
-  @Get()
-  list(@Query('studentId') studentId?: string) {
-    return this.fingerprints.list(studentId);
-  }
-
   @Get('sync')
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
   sync() {
     return this.fingerprints.templatesForSync();
+  }
+
+  @Get()
+  list(@Query('studentId') studentId?: string) {
+    return this.fingerprints.list(studentId);
   }
 
   @Post('enroll')

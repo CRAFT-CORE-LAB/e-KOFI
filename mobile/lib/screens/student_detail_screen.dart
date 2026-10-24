@@ -8,7 +8,6 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'fingerprint_enroll_screen.dart';
 import 'student_form_screen.dart';
-import 'wallet_screen.dart';
 
 class StudentDetailScreen extends StatefulWidget {
   const StudentDetailScreen({super.key, required this.studentId});
@@ -39,25 +38,53 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _edit() async {
+    final student = this.student;
+    if (student == null) return;
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => StudentFormScreen(existing: student)),
+    );
+    if (changed == true) _load();
+  }
+
+  Future<void> _delete() async {
+    final student = this.student;
+    if (student == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove student'),
+        content: Text(
+          'Remove ${student.fullName} (${student.studentCode}) from the register?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<SessionController>().api.deleteStudent(student.id);
+      if (mounted) Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<SessionController>().isAdmin;
     final student = this.student;
     return Scaffold(
       appBar: AppBar(
-        title: Text(student?.fullName ?? 'Student'),
+        title: Text(student?.studentCode ?? 'Student'),
         actions: [
-          if (admin && student != null)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => StudentFormScreen(existing: student)),
-                );
-                _load();
-              },
-            ),
+          if (admin && student != null) ...[
+            IconButton(icon: const Icon(Icons.edit_outlined), onPressed: _edit),
+            IconButton(icon: const Icon(Icons.delete_outline), onPressed: _delete),
+          ],
         ],
       ),
       body: student == null
@@ -80,11 +107,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    student.fullName,
-                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: navy),
+                                    student.studentCode,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 22,
+                                      color: navy,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(student.studentCode, style: const TextStyle(color: muted)),
+                                  Text(
+                                    student.fullName,
+                                    style: const TextStyle(color: muted, fontSize: 16),
+                                  ),
                                 ],
                               ),
                             ),
@@ -94,15 +128,6 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                         const SizedBox(height: 16),
                         Text(
                           '${student.school?.name ?? ''} · ${student.schoolClass?.name ?? ''}',
-                          style: const TextStyle(color: muted),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          student.wallet != null ? rwf(student.wallet!.balanceRwf) : '—',
-                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: navy),
-                        ),
-                        Text(
-                          student.pinEnabled ? 'PIN required at payment' : 'No PIN required',
                           style: const TextStyle(color: muted),
                         ),
                       ],
@@ -125,7 +150,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                         MaterialPageRoute(
                           builder: (_) => FingerprintEnrollScreen(
                             studentId: student.id,
-                            studentName: student.fullName,
+                            studentName: '${student.fullName} · ${student.studentCode}',
                           ),
                         ),
                       );
@@ -134,28 +159,6 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                     icon: const Icon(Icons.fingerprint),
                     label: Text(student.hasFingerprint ? 'Update fingerprint' : 'Register fingerprint'),
                   ),
-                const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => WalletScreen(studentId: student.id)),
-                  ),
-                  child: const Text('Open wallet'),
-                ),
-                if (admin && student.isActive) ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: () async {
-                      try {
-                        await context.read<SessionController>().api.deactivateStudent(student.id);
-                        _load();
-                      } on ApiException catch (e) {
-                        if (context.mounted) showError(context, e);
-                      }
-                    },
-                    child: const Text('Deactivate student'),
-                  ),
-                ],
               ],
             ),
     );

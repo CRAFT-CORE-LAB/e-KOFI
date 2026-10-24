@@ -4,12 +4,18 @@ import 'package:intl/intl.dart';
 const navy = Color(0xFF0B1F3A);
 const teal = Color(0xFF14B8A6);
 const white = Color(0xFFFFFFFF);
-const canvas = Color(0xFFF3F6FA);
+const canvas = Color(0xFFF7F1E8);
 const muted = Color(0xFF5B6B7C);
 
 final moneyFormat = NumberFormat.decimalPattern();
 
 String rwf(int amount) => '${moneyFormat.format(amount)} RWF';
+
+String friendlyWhen(String iso) {
+  final parsed = DateTime.tryParse(iso);
+  if (parsed == null) return '';
+  return DateFormat('dd MMM yyyy · HH:mm').format(parsed.toLocal());
+}
 
 String greetingForNow() {
   final hour = DateTime.now().hour;
@@ -26,9 +32,9 @@ String firstNameOf(String? name) {
 String friendlyRole(String role) {
   switch (role.toUpperCase()) {
     case 'ADMIN':
-      return 'Administrator';
+      return 'Student registration';
     case 'CASHIER':
-      return 'Cashier';
+      return 'Canteen';
     default:
       return role;
   }
@@ -38,6 +44,8 @@ String friendlyEvent(String type) {
   switch (type.toUpperCase()) {
     case 'PURCHASE':
       return 'Meal';
+    case 'CANTEEN_WITHDRAWAL':
+      return 'Withdrawal';
     case 'REVERSAL':
       return 'Refund';
     case 'TEST_CREDIT':
@@ -85,10 +93,10 @@ ThemeData ekofiTheme() {
   );
   return ThemeData(
     colorScheme: scheme,
-    scaffoldBackgroundColor: canvas,
+    scaffoldBackgroundColor: Colors.transparent,
     useMaterial3: true,
     appBarTheme: const AppBarTheme(
-      backgroundColor: canvas,
+      backgroundColor: Colors.transparent,
       foregroundColor: navy,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -100,9 +108,9 @@ ThemeData ekofiTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: white,
+      backgroundColor: white.withValues(alpha: 0.78),
       elevation: 0,
-      shadowColor: navy.withValues(alpha: 0.06),
+      shadowColor: navy.withValues(alpha: 0.04),
       indicatorColor: teal.withValues(alpha: 0.16),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
@@ -118,7 +126,7 @@ ThemeData ekofiTheme() {
       }),
     ),
     cardTheme: CardThemeData(
-      color: white,
+      color: white.withValues(alpha: 0.62),
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
@@ -152,7 +160,7 @@ ThemeData ekofiTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: white,
+      fillColor: white.withValues(alpha: 0.55),
       labelStyle: const TextStyle(color: muted),
       hintStyle: TextStyle(color: muted.withValues(alpha: 0.8)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
