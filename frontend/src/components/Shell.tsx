@@ -40,7 +40,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="border-b border-white/10 bg-[#0B1F3A] text-white lg:min-h-screen lg:border-b-0 lg:border-r">
         <div className="px-5 py-6">
-          <img src="/ekofi-logo.jpg" alt="e-KOFI" className="h-10 w-auto rounded-md bg-white p-1" />
+          <img src="/ekofi-logo.png" alt="e-KOFI" className="h-10 w-auto" />
           <p className="mt-3 text-sm text-white/70">Safe money. Fast payments.</p>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col">

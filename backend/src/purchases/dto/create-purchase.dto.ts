@@ -10,18 +10,8 @@ export class CreatePurchaseDto {
   @IsUUID()
   canteenId!: string;
 
-  @IsOptional()
   @IsUUID()
-  studentId?: string;
-
-  @IsOptional()
-  @Matches(/^[0-9A-Fa-f]{6,32}$/)
-  cardUid?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(16)
-  authToken?: string;
+  studentId!: string;
 
   @IsOptional()
   @Matches(/^\d{4,6}$/)

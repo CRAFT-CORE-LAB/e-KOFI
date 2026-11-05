@@ -13,6 +13,7 @@ class AuthUser {
 
   bool get isAdmin => role == 'ADMIN';
   bool get isCanteen => role == 'CASHIER';
+  bool get isOwner => role == 'SUPERADMIN';
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as String,
@@ -71,37 +72,6 @@ class WalletSummary {
   );
 }
 
-class NfcCard {
-  const NfcCard({
-    required this.id,
-    required this.cardUid,
-    required this.status,
-    required this.studentId,
-    this.blockedReason,
-    this.student,
-  });
-
-  final String id;
-  final String cardUid;
-  final String status;
-  final String studentId;
-  final String? blockedReason;
-  final Student? student;
-
-  bool get isActive => status == 'ACTIVE';
-
-  factory NfcCard.fromJson(Map<String, dynamic> json) => NfcCard(
-    id: json['id'] as String,
-    cardUid: json['cardUid'] as String,
-    status: json['status'] as String,
-    studentId: json['studentId'] as String,
-    blockedReason: json['blockedReason'] as String?,
-    student: json['student'] is Map<String, dynamic>
-        ? Student.fromJson(json['student'] as Map<String, dynamic>)
-        : null,
-  );
-}
-
 class Student {
   const Student({
     required this.id,
@@ -114,7 +84,6 @@ class Student {
     this.school,
     this.schoolClass,
     this.wallet,
-    this.cards = const [],
     this.fingerprints = const [],
   });
 
@@ -128,7 +97,6 @@ class Student {
   final School? school;
   final SchoolClass? schoolClass;
   final WalletSummary? wallet;
-  final List<NfcCard> cards;
   final List<FingerprintRecord> fingerprints;
 
   String get fullName => '$firstName $lastName';
@@ -155,9 +123,6 @@ class Student {
     wallet: json['wallet'] is Map<String, dynamic>
         ? WalletSummary.fromJson(json['wallet'] as Map<String, dynamic>)
         : null,
-    cards: (json['cards'] as List<dynamic>? ?? [])
-        .map((e) => NfcCard.fromJson(e as Map<String, dynamic>))
-        .toList(),
     fingerprints: (json['fingerprints'] as List<dynamic>? ?? [])
         .map((e) => FingerprintRecord.fromJson(e as Map<String, dynamic>))
         .toList(),
@@ -401,6 +366,139 @@ class WalletDetail {
   );
 }
 
+class PortalStudent {
+  const PortalStudent({
+    required this.studentCode,
+    required this.fullName,
+    required this.schoolName,
+    required this.className,
+    required this.status,
+  });
+
+  final String studentCode;
+  final String fullName;
+  final String schoolName;
+  final String className;
+  final String status;
+
+  bool get isActive => status == 'ACTIVE';
+
+  factory PortalStudent.fromJson(Map<String, dynamic> json) => PortalStudent(
+    studentCode: json['studentCode'] as String? ?? '',
+    fullName: json['fullName'] as String? ?? '',
+    schoolName: json['schoolName'] as String? ?? '',
+    className: json['className'] as String? ?? '',
+    status: json['status'] as String? ?? 'ACTIVE',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'studentCode': studentCode,
+    'fullName': fullName,
+    'schoolName': schoolName,
+    'className': className,
+    'status': status,
+  };
+}
+
+class StudentLookup {
+  const StudentLookup({required this.student, required this.hasAccount});
+
+  final PortalStudent student;
+  final bool hasAccount;
+}
+
+class PortalActivity {
+  const PortalActivity({
+    required this.id,
+    required this.type,
+    required this.label,
+    required this.amountRwf,
+    required this.when,
+    this.canteenName,
+    this.description,
+  });
+
+  final String id;
+  final String type;
+  final String label;
+  final int amountRwf;
+  final String when;
+  final String? canteenName;
+  final String? description;
+
+  bool get isMeal => type == 'PURCHASE';
+
+  factory PortalActivity.fromJson(Map<String, dynamic> json) => PortalActivity(
+    id: json['id'] as String? ?? '',
+    type: json['type'] as String? ?? '',
+    label: json['label'] as String? ?? 'Wallet update',
+    amountRwf: _asInt(json['amountRwf']),
+    when: json['when'] as String? ?? '',
+    canteenName: json['canteenName'] as String?,
+    description: json['description'] as String?,
+  );
+}
+
+class PortalWallet {
+  const PortalWallet({
+    required this.student,
+    required this.balanceRwf,
+    required this.activity,
+  });
+
+  final PortalStudent student;
+  final int balanceRwf;
+  final List<PortalActivity> activity;
+
+  factory PortalWallet.fromJson(Map<String, dynamic> json) => PortalWallet(
+    student: PortalStudent.fromJson(json['student'] as Map<String, dynamic>),
+    balanceRwf: _asInt(json['balanceRwf']),
+    activity: (json['activity'] as List<dynamic>? ?? [])
+        .map((e) => PortalActivity.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class TopUpState {
+  const TopUpState({
+    required this.status,
+    required this.requestId,
+    required this.message,
+    required this.grossRwf,
+    required this.feeRwf,
+    required this.studentCreditRwf,
+    this.balanceRwf,
+  });
+
+  final String status;
+  final String requestId;
+  final String message;
+  final int grossRwf;
+  final int feeRwf;
+  final int studentCreditRwf;
+  final int? balanceRwf;
+
+  bool get isPending => status == 'PENDING';
+  bool get isPosted => status == 'POSTED';
+  bool get isFailed => status == 'FAILED';
+
+  factory TopUpState.fromJson(Map<String, dynamic> json) => TopUpState(
+    status: json['status'] as String? ?? 'PENDING',
+    requestId: json['requestId'] as String? ?? '',
+    message: json['message'] as String? ?? '',
+    grossRwf: _asInt(json['grossRwf']),
+    feeRwf: _asInt(json['feeRwf']),
+    studentCreditRwf: _asInt(json['studentCreditRwf']),
+    balanceRwf: json['balanceRwf'] == null ? null : _asInt(json['balanceRwf']),
+  );
+}
+
+int _asInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  return int.tryParse('$value') ?? 0;
+}
+
 class PurchaseResult {
   const PurchaseResult({required this.event, this.wallet, this.duplicate = false});
 
@@ -417,24 +515,3 @@ class PurchaseResult {
   );
 }
 
-class CardRegisterResult {
-  const CardRegisterResult({
-    required this.card,
-    required this.authToken,
-    required this.writeToCard,
-    required this.message,
-  });
-
-  final NfcCard card;
-  final String authToken;
-  final bool writeToCard;
-  final String message;
-
-  factory CardRegisterResult.fromJson(Map<String, dynamic> json) =>
-      CardRegisterResult(
-        card: NfcCard.fromJson(json['card'] as Map<String, dynamic>),
-        authToken: json['authToken'] as String,
-        writeToCard: json['writeToCard'] as bool? ?? false,
-        message: json['message'] as String? ?? '',
-      );
-}

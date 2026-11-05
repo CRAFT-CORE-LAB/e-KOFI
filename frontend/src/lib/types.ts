@@ -28,16 +28,6 @@ export type Student = {
   school: { id: string; name: string };
   class: { id: string; name: string };
   wallet?: { id: string; balanceRwf: number };
-  cards?: Card[];
-};
-
-export type Card = {
-  id: string;
-  cardUid: string;
-  status: 'ACTIVE' | 'BLOCKED';
-  blockedReason?: string | null;
-  student?: Student;
-  studentId: string;
 };
 
 export type Canteen = {
@@ -74,6 +64,7 @@ export type DashboardStats = {
   activeStudents: number;
   canteens: number;
   activeCards: number;
+  enrolledFingerprints?: number;
   postedPurchases: number;
   purchaseVolumeRwf: number;
   recent: LedgerEvent[];

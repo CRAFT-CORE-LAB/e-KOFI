@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --font-sans: var(--font-source), ui-sans-serif, system-ui, sans-serif;
+  --color-navy: #0b1f3a;
+  --color-teal: #14b8a6;
+  --color-pine: #0f766e;
+  --color-cream: #f7f1e8;
+  --color-muted: #5b6b7c;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #f7f1e8;
+  color: #0b1f3a;
+  font-family: var(--font-source), ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: #14b8a6;
+  color: #0b1f3a;
+}
+
+:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 3px;
+}
+
+.skip {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 80;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: #0b1f3a;
+}
+
+.skip:focus {
+  top: 1rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .rise {
+    animation: none;
+  }
+
+  .lift {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lift {
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .lift:hover {
+    transform: translateY(-2px);
+  }
+}

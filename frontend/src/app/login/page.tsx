@@ -38,9 +38,9 @@ export default function LoginPage() {
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.06]"
         style={{
-          backgroundImage: "url('/ekofi-logo.jpg')",
+          backgroundImage: "url('/ekofi-icon.png')",
           backgroundRepeat: 'repeat',
-          backgroundSize: '180px',
+          backgroundSize: '120px',
         }}
       />
       <div className="relative w-full max-w-md rounded-2xl border border-[#0B1F3A]/10 bg-white p-8 shadow-sm">

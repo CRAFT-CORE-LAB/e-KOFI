@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   ADMIN
   CASHIER
+  SUPERADMIN
 }
 
 enum StudentStatus {
@@ -32,9 +33,17 @@ enum FingerPosition {
 
 enum FinancialEventType {
   TEST_CREDIT
+  PARENT_TOPUP
   PURCHASE
   REVERSAL
   CANTEEN_WITHDRAWAL
+  PLATFORM_WITHDRAWAL
+}
+
+enum PaymentIntentStatus {
+  PENDING
+  POSTED
+  FAILED
 }
 
 enum FinancialEventStatus {
@@ -47,6 +56,7 @@ enum LedgerAccountType {
   CANTEEN_ACCOUNT
   SYSTEM_TEST_FUND
   INTOUCH_PAYOUT
+  PLATFORM_FEE
 }
 
 enum LedgerEntrySide {
@@ -99,12 +109,16 @@ model Student {
   pinEnabled     Boolean       @default(false)
   pinFailedCount Int           @default(0)
   pinLockedUntil DateTime?
+  portalPasswordHash String?
+  portalFailedCount  Int       @default(0)
+  portalLockedUntil  DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   wallet         Wallet?
   cards          NfcCard[]
   fingerprints   FingerprintTemplate[]
   events         FinancialEvent[]
+  paymentIntents PaymentIntent[]
 
   @@index([lastName, firstName])
   @@index([schoolId, classId])
@@ -141,6 +155,33 @@ model CanteenAccount {
   balanceRwf Int           @default(0)
   updatedAt  DateTime      @updatedAt
   entries    LedgerEntry[]
+}
+
+model PlatformFeeAccount {
+  id         String        @id @default(uuid())
+  balanceRwf Int           @default(0)
+  updatedAt  DateTime      @updatedAt
+  entries    LedgerEntry[]
+}
+
+model PaymentIntent {
+  id                String              @id @default(uuid())
+  status            PaymentIntentStatus @default(PENDING)
+  requestId         String              @unique
+  studentId         String
+  student           Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  grossRwf          Int
+  feeRwf            Int
+  studentCreditRwf  Int
+  phone             String
+  idempotencyKey    String              @unique
+  intouchRef        String?
+  responseCode      String?
+  statusDesc        String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([studentId, status])
 }
 
 model FingerprintTemplate {
@@ -215,13 +256,16 @@ model LedgerEntry {
   amountRwf        Int
   walletId         String?
   wallet           Wallet?           @relation(fields: [walletId], references: [id], onDelete: Restrict)
-  canteenAccountId String?
-  canteenAccount   CanteenAccount?   @relation(fields: [canteenAccountId], references: [id], onDelete: Restrict)
-  createdAt        DateTime          @default(now())
+  canteenAccountId     String?
+  canteenAccount       CanteenAccount?     @relation(fields: [canteenAccountId], references: [id], onDelete: Restrict)
+  platformFeeAccountId String?
+  platformFeeAccount   PlatformFeeAccount? @relation(fields: [platformFeeAccountId], references: [id], onDelete: Restrict)
+  createdAt            DateTime            @default(now())
 
   @@index([eventId])
   @@index([walletId])
   @@index([canteenAccountId])
+  @@index([platformFeeAccountId])
 }
 
 model IdempotencyRecord {

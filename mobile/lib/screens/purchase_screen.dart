@@ -57,7 +57,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       try {
         templates = await api.fingerprintSync();
       } on ApiException catch (e) {
-        if (e.statusCode != 401 && mounted) showError(context, e);
+        if (e.statusCode != 401 && mounted && templates.isEmpty) showError(context, e);
       }
     } on ApiException catch (e) {
       if (mounted) showError(context, e);
@@ -124,7 +124,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
     try {
       final api = context.read<SessionController>().api;
-      templates = await api.fingerprintSync();
+      try {
+        templates = await api.fingerprintSync();
+      } on ApiException {
+        if (templates.isEmpty) rethrow;
+      }
       if (!mounted) return;
       final identified = await scanner.identify(templates: templates);
       final matchedId = identified.split('::').first;
@@ -148,11 +152,18 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       final remaining = posted.wallet != null ? rwf(posted.wallet!.balanceRwf) : '—';
       amount.clear();
       if (!mounted) return;
+      final offline = posted.event.status == 'PENDING_SYNC';
       await showPaymentBurst(
         context,
         ok: true,
-        title: posted.duplicate ? 'Already taken' : 'Payment successful',
-        message: posted.duplicate
+        title: offline
+            ? 'Saved offline'
+            : posted.duplicate
+            ? 'Already taken'
+            : 'Payment successful',
+        message: offline
+            ? '${match.studentCode} · ${match.fullName}\n${rwf(meal)} recorded on this device.\nWallet left $remaining.\nIt will sync when internet returns.'
+            : posted.duplicate
             ? '${match.fullName} was already charged. Wallet still $remaining.'
             : '${match.studentCode} · ${match.fullName}\n${rwf(meal)} paid.\nWallet left $remaining.',
       );

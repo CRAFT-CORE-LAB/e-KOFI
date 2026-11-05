@@ -23,12 +23,11 @@ export class DashboardService {
         }),
       ]).then(([count, sum]) => ({ count, amountRwf: sum._sum.amountRwf ?? 0 }));
 
-    const [students, activeStudents, canteens, cards, fingerprints, postedPurchases, purchaseAgg, hours6, hours24, days7, canteenBalance] =
+    const [students, activeStudents, canteens, fingerprints, postedPurchases, purchaseAgg, hours6, hours24, days7, canteenBalance] =
       await Promise.all([
         this.prisma.student.count(),
         this.prisma.student.count({ where: { status: 'ACTIVE' } }),
         this.prisma.canteen.count(),
-        this.prisma.nfcCard.count({ where: { status: 'ACTIVE' } }),
         this.prisma.fingerprintTemplate.count({ where: { isActive: true } }),
         this.prisma.financialEvent.count({ where: purchaseWhere }),
         this.prisma.financialEvent.aggregate({
@@ -55,7 +54,7 @@ export class DashboardService {
       students,
       activeStudents,
       canteens,
-      activeCards: cards,
+      activeCards: fingerprints,
       enrolledFingerprints: fingerprints,
       postedPurchases,
       purchaseVolumeRwf: purchaseAgg._sum.amountRwf ?? 0,

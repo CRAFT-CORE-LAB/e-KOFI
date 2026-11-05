@@ -153,7 +153,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                     ),
                   ),
                 ),
-                if (canteen && event.status == 'POSTED' && event.type != 'REVERSAL') ...[
+                if (canteen &&
+                    (event.status == 'POSTED' || event.status == 'PENDING_SYNC') &&
+                    event.type != 'REVERSAL') ...[
                   const SizedBox(height: 20),
                   OutlinedButton(
                     onPressed: () async {

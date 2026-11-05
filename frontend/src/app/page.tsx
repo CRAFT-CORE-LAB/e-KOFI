@@ -27,7 +27,10 @@ export default function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <Stat label="Students" value={String(stats.students)} hint={`${stats.activeStudents} active`} />
             <Stat label="Canteens" value={String(stats.canteens)} />
-            <Stat label="Active NFC cards" value={String(stats.activeCards)} />
+            <Stat
+              label="Fingerprints enrolled"
+              value={String(stats.enrolledFingerprints ?? stats.activeCards)}
+            />
             <Stat label="Posted purchases" value={String(stats.postedPurchases)} />
             <Stat label="Purchase volume" value={money(stats.purchaseVolumeRwf)} />
           </div>

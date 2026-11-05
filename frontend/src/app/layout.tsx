@@ -10,7 +10,7 @@ const sans = Source_Sans_3({
 export const metadata: Metadata = {
   title: 'e-KOFI Admin',
   description: 'Safe Money. Fast Payments. Made for Students.',
-  icons: { icon: '/ekofi-icon.png' },
+  icons: { icon: '/ekofi-icon.png', apple: '/ekofi-icon.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,8 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CardStatus, StudentStatus } from '@prisma/client';
+import { StudentStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { CardsService } from '../cards/cards.service';
 import { FinanceService } from './finance.service';
 
 type Wallet = { id: string; studentId: string; balanceRwf: number };
@@ -15,7 +14,6 @@ type Student = {
   pinFailedCount: number;
   pinLockedUntil: Date | null;
   wallet: Wallet;
-  cards: Array<{ id: string; status: CardStatus; studentId: string }>;
 };
 
 function createDb() {
@@ -145,8 +143,6 @@ describe('FinanceService', () => {
   const studentId = 'stu-1';
   const walletId = 'wal-1';
   const canteenId = 'can-1';
-  const cardId = 'card-1';
-
   beforeAll(async () => {
     pinHash = await bcrypt.hash('2468', 4);
   });
@@ -163,25 +159,12 @@ describe('FinanceService', () => {
       pinFailedCount: 0,
       pinLockedUntil: null,
       wallet,
-      cards: [{ id: cardId, status: CardStatus.ACTIVE, studentId }],
     });
     db.canteens.set(canteenId, {
       id: canteenId,
       isActive: true,
       account: { id: 'acc-1', canteenId, balanceRwf: 0 },
     });
-
-    const cards = {
-      authenticateCard: jest.fn(async (uid: string, token: string) => {
-        if (uid === 'BLOCKED') {
-          throw new BadRequestException('This card is blocked');
-        }
-        if (token !== 'valid-token-value-1') {
-          throw new BadRequestException('Card authentication failed');
-        }
-        return { id: cardId, studentId, status: CardStatus.ACTIVE };
-      }),
-    } as unknown as CardsService;
 
     const config = {
       get: (key: string) => {
@@ -191,7 +174,7 @@ describe('FinanceService', () => {
       },
     } as unknown as ConfigService;
 
-    service = new FinanceService(db.prisma, cards, config);
+    service = new FinanceService(db.prisma, config);
   });
 
   async function buy(overrides: Record<string, unknown> = {}) {
@@ -235,18 +218,6 @@ describe('FinanceService', () => {
     expect(db.wallets.get(walletId)!.balanceRwf).toBe(7500);
     expect(db.canteens.get(canteenId)!.account.balanceRwf).toBe(2500);
     expect(second.event.amountRwf).toBe(2500);
-  });
-
-  it('rejects blocked cards before posting a purchase', async () => {
-    await expect(
-      buy({
-        studentId: undefined,
-        cardUid: 'BLOCKED',
-        authToken: 'valid-token-value-1',
-        idempotencyKey: 'idemp-block',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(db.wallets.get(walletId)!.balanceRwf).toBe(10000);
   });
 
   it('takes a fingerprint payment without a PIN', async () => {

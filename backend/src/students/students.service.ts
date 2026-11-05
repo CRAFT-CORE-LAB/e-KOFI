@@ -14,7 +14,6 @@ const studentInclude = {
   school: true,
   class: true,
   wallet: true,
-  cards: { orderBy: { createdAt: 'desc' as const } },
   fingerprints: {
     where: { isActive: true },
     orderBy: { createdAt: 'desc' as const },

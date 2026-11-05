@@ -1,13 +1,7 @@
-import { PrismaClient, UserRole, StudentStatus, CardStatus } from '@prisma/client';
+import { PrismaClient, UserRole, StudentStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { createHash } from 'crypto';
 
 const prisma = new PrismaClient();
-
-function hashCardToken(token: string): string {
-  const pepper = process.env.CARD_TOKEN_PEPPER ?? 'dev-card-pepper';
-  return createHash('sha256').update(`${pepper}:${token}`).digest('hex');
-}
 
 async function main() {
   const adminHash = await bcrypt.hash('Admin123!', 12);
@@ -33,6 +27,34 @@ async function main() {
       passwordHash: cashierHash,
       name: 'Canteen Cashier',
       role: UserRole.CASHIER,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'owner@ekofi.local' },
+    update: { role: UserRole.SUPERADMIN, name: 'e-KOFI Owner' },
+    create: {
+      email: 'owner@ekofi.local',
+      passwordHash: await bcrypt.hash('Owner123!', 12),
+      name: 'e-KOFI Owner',
+      role: UserRole.SUPERADMIN,
+    },
+  });
+
+  await prisma.platformFeeAccount.upsert({
+    where: { id: '00000000-0000-4000-8000-0000000000fe' },
+    update: {},
+    create: { id: '00000000-0000-4000-8000-0000000000fe', balanceRwf: 0 },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'parent-portal@ekofi.system' },
+    update: { name: 'Parent portal' },
+    create: {
+      email: 'parent-portal@ekofi.system',
+      passwordHash: await bcrypt.hash(`parent-portal-${Date.now()}`, 12),
+      name: 'Parent portal',
+      role: UserRole.ADMIN,
     },
   });
 
@@ -97,19 +119,6 @@ async function main() {
       classId: s1b.id,
       status: StudentStatus.DEACTIVATED,
       wallet: { create: { balanceRwf: 0 } },
-    },
-  });
-
-  const demoToken = 'EKOFI-DEMO-CARD-TOKEN-AIME';
-  await prisma.nfcCard.upsert({
-    where: { id: '11111111-1111-4111-8111-111111111111' },
-    update: {},
-    create: {
-      id: '11111111-1111-4111-8111-111111111111',
-      cardUid: '04A1B2C3D4E5F6',
-      authTokenHash: hashCardToken(demoToken),
-      studentId: aime.id,
-      status: CardStatus.ACTIVE,
     },
   });
 
@@ -224,8 +233,9 @@ async function main() {
   console.log('Seed complete.');
   console.log('Admin:   admin@ekofi.local / Admin123!');
   console.log('Cashier: cashier@ekofi.local / Cashier123!');
+  console.log('Owner:   owner@ekofi.local / Owner123!');
   console.log('Demo student PIN for Aime Uwase: 2468');
-  console.log('Demo NFC UID: 04A1B2C3D4E5F6 token: EKOFI-DEMO-CARD-TOKEN-AIME');
+  console.log('Register fingerprints in the mobile app for canteen payments.');
 }
 
 main()

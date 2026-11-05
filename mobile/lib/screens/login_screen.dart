@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../state/session.dart';
 import '../theme.dart';
 import '../widgets.dart';
-import 'shell_screen.dart';
+import 'session_home.dart';
+
+enum _SignInAs { admin, canteen, parent, student }
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,27 +17,45 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final email = TextEditingController();
+  final studentCode = TextEditingController();
   final password = TextEditingController();
   bool hidePassword = true;
   int _logoTaps = 0;
-  bool adminPortal = true;
+  _SignInAs audience = _SignInAs.admin;
 
   @override
   void dispose() {
     email.dispose();
+    studentCode.dispose();
     password.dispose();
     super.dispose();
   }
 
+  Future<void> _enter() async {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const SessionHome()),
+    );
+  }
+
   Future<void> _submit() async {
     final session = context.read<SessionController>();
+    if (audience == _SignInAs.parent) {
+      try {
+        await session.openParent(studentCode.text.trim());
+        await _enter();
+      } catch (_) {}
+      return;
+    }
+    if (audience == _SignInAs.student) {
+      final ok = await session.loginStudent(studentCode.text.trim(), password.text);
+      if (!mounted) return;
+      if (ok) await _enter();
+      return;
+    }
     final ok = await session.login(email.text.trim(), password.text);
     if (!mounted) return;
-    if (ok) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ShellScreen()),
-      );
-    }
+    if (ok) await _enter();
   }
 
   void _onLogoTap() {
@@ -105,7 +125,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  adminPortal ? 'Good to have you back.' : 'Ready when the students are.',
+                  switch (audience) {
+                    _SignInAs.parent => 'Open your child’s wallet with their Student ID.',
+                    _SignInAs.student => 'Sign in with your Student ID and password.',
+                    _SignInAs.canteen => 'Ready when the students are.',
+                    _SignInAs.admin => 'Good to have you back.',
+                  },
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: muted, fontSize: 16, height: 1.4),
                 ),
@@ -120,16 +145,36 @@ class _LoginScreenState extends State<LoginScreen> {
                     Expanded(
                       child: _PortalChip(
                         label: 'Admin',
-                        selected: adminPortal,
-                        onTap: () => setState(() => adminPortal = true),
+                        selected: audience == _SignInAs.admin,
+                        onTap: () => setState(() => audience = _SignInAs.admin),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: _PortalChip(
                         label: 'Canteen',
-                        selected: !adminPortal,
-                        onTap: () => setState(() => adminPortal = false),
+                        selected: audience == _SignInAs.canteen,
+                        onTap: () => setState(() => audience = _SignInAs.canteen),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PortalChip(
+                        label: 'Parent',
+                        selected: audience == _SignInAs.parent,
+                        onTap: () => setState(() => audience = _SignInAs.parent),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PortalChip(
+                        label: 'Student',
+                        selected: audience == _SignInAs.student,
+                        onTap: () => setState(() => audience = _SignInAs.student),
                       ),
                     ),
                   ],
@@ -145,16 +190,29 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(
-                        controller: email,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.username, AutofillHints.email],
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.mail_outline, color: muted),
+                      if (audience == _SignInAs.parent || audience == _SignInAs.student)
+                        TextField(
+                          controller: studentCode,
+                          textCapitalization: TextCapitalization.characters,
+                          textInputAction: audience == _SignInAs.parent ? TextInputAction.done : TextInputAction.next,
+                          onSubmitted: audience == _SignInAs.parent ? (_) => _submit() : null,
+                          decoration: const InputDecoration(
+                            labelText: 'Student ID',
+                            prefixIcon: Icon(Icons.badge_outlined, color: muted),
+                          ),
+                        )
+                      else
+                        TextField(
+                          controller: email,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.username, AutofillHints.email],
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.mail_outline, color: muted),
+                          ),
                         ),
-                      ),
+                      if (audience != _SignInAs.parent) ...[
                       const SizedBox(height: 14),
                       TextField(
                         controller: password,
@@ -174,11 +232,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+                      ],
                       const SizedBox(height: 18),
                       if (session.error != null) ErrorBanner(message: session.error!),
                       FilledButton(
                         onPressed: session.busy ? null : _submit,
-                        child: Text(session.busy ? 'Signing in…' : 'Sign in'),
+                        child: Text(
+                          session.busy
+                              ? 'One moment…'
+                              : audience == _SignInAs.parent
+                                  ? 'Open wallet'
+                                  : 'Sign in',
+                        ),
                       ),
                     ],
                   ),

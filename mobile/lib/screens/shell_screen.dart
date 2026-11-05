@@ -10,6 +10,7 @@ import 'canteens_screen.dart';
 import 'dashboard_screen.dart';
 import 'fingerprints_screen.dart';
 import 'welcome_screen.dart';
+import 'platform_screen.dart';
 import 'purchase_screen.dart';
 import 'students_screen.dart';
 import 'transactions_screen.dart';
@@ -27,7 +28,11 @@ class _ShellScreenState extends State<ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<SessionController>().isAdmin;
+    final session = context.watch<SessionController>();
+    if (session.isOwner) {
+      return const PlatformScreen();
+    }
+    final admin = session.isAdmin;
     final pages = admin
         ? const [DashboardScreen(), StudentsScreen(), FingerprintsScreen(), MoreScreen()]
         : const [DashboardScreen(), PurchaseScreen(), TransactionsScreen(), MoreScreen()];
@@ -46,7 +51,11 @@ class _ShellScreenState extends State<ShellScreen> {
             MagicNavItem(icon: Icons.more_horiz, selectedIcon: Icons.auto_awesome, label: 'More'),
           ];
     return Scaffold(
-      body: AnimatedSwitcher(
+      body: Column(
+        children: [
+          const OfflineStatusBanner(),
+          Expanded(
+            child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 420),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
@@ -63,6 +72,9 @@ class _ShellScreenState extends State<ShellScreen> {
           );
         },
         child: KeyedSubtree(key: ValueKey('tab-$safeIndex-${admin ? 'a' : 'c'}'), child: pages[safeIndex]),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: MagicNavBar(
         index: safeIndex,

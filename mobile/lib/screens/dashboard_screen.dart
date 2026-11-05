@@ -78,6 +78,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 20),
             if (error != null) ErrorBanner(message: error!),
+            if (context.watch<SessionController>().api.servingFromCache)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: OfflineStatusBanner(compact: true),
+              ),
             if (loading && stats == null) const Padding(padding: EdgeInsets.only(top: 48), child: LoadingView()),
             if (stats != null) ...[
               GridView.count(

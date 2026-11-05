@@ -1,6 +1,6 @@
 # e-KOFI — School Canteen Cashless Payments (Phase 1)
 
-Phase 1 is the internal ledger: student accounts, NFC card assignment, wallets, canteen accounts, and auditable purchases. External payment providers (MoMo, banks) are intentionally not integrated.
+Phase 1 is the internal ledger: student accounts, fingerprint identification at the canteen, wallets, canteen accounts, and auditable purchases. External payment providers (MoMo, banks) are intentionally not integrated.
 
 ## Stack
 
@@ -8,19 +8,18 @@ Phase 1 is the internal ledger: student accounts, NFC card assignment, wallets, 
 - **Mobile app:** Flutter (Android + iOS) in `mobile/`
 - **API:** NestJS, TypeScript, REST (`backend/`)
 - **Database:** PostgreSQL + Prisma
-- **NFC registrar:** Android Kotlin app (`android/`) — the Flutter app now covers the same NFC + staff flows
+- **Legacy NFC app:** `android/` (deprecated; use Flutter + Live20R fingerprint reader)
 
 The repository already contained a NestJS starter in `backend/`. This phase builds on that app.
 
 ## Features
 
 - Register, search, edit, and deactivate students with unique IDs, school, and class
-- Register NFC cards from an Android scan, assign one active card per student, block lost cards, and issue replacements
-- Secure card authentication with a token written to the tag (UID alone is rejected for payment)
+- Enroll Live20R fingerprints for canteen payments (mobile staff app)
 - One wallet per student, balances in integer RWF
 - Administrator **test credits** for development only, posted to the ledger
 - Canteen accounts with earnings history (no withdrawals)
-- Purchase flow: select student or scan card → optional PIN → amount → atomic debit/credit
+- Purchase flow: fingerprint identifies student → optional PIN → amount → atomic debit/credit
 - Double-entry ledger, idempotent purchases, no silent edits/deletes of posted entries
 
 ## Setup
@@ -62,8 +61,7 @@ Seed logins:
 | Admin   | `admin@ekofi.local`   | `Admin123!`  |
 | Cashier | `cashier@ekofi.local` | `Cashier123!` |
 
-Demo student **Aime Uwase** (`STU-000001`) PIN: `2468`  
-Demo card UID: `04A1B2C3D4E5F6` token: `EKOFI-DEMO-CARD-TOKEN-AIME`
+Demo student **Aime Uwase** (`STU-000001`) PIN: `2468`
 
 ### 3. Admin UI
 
@@ -88,11 +86,7 @@ On an **Android emulator**, the default API URL is `http://10.0.2.2:3001/api`.
 On the **iOS simulator**, it is `http://127.0.0.1:3001/api`.  
 On a **physical phone**, open More → API server and set your computer’s LAN address, for example `http://192.168.1.10:3001/api`. Keep the NestJS API running.
 
-NFC scan, register, token write, and purchase-by-card work on NFC-capable Android phones. iOS can read/write NDEF tokens; UID capture is most reliable on Android.
-
-### 5. Android NFC app (legacy Kotlin registrar)
-
-Open `android/` in Android Studio, set `API_URL` in `app/build.gradle.kts` to your machine (use the LAN IP, not `localhost`, from a physical phone). Sign in as admin, scan a tag, paste the student UUID from the admin UI, and register. If the tag has no token, tap it again to write the issued `EKOFI:` NDEF text record.
+Canteen payments use a **Live20R** fingerprint reader (USB on the phone or via the PC agent in `pc-scanner/`).
 
 ## Testing
 
@@ -102,11 +96,11 @@ npm test
 npm run test:e2e
 ```
 
-Unit tests cover purchases, insufficient balance, duplicate idempotency keys, blocked cards, PIN lockout, test credits, and balanced ledger reversals. They do not require PostgreSQL.
+Unit tests cover purchases, insufficient balance, duplicate idempotency keys, PIN lockout, test credits, and balanced ledger reversals. They do not require PostgreSQL.
 
 ## Definition of done (Phase 1)
 
-An administrator can register a student, assign an NFC card, issue a test credit, register a canteen, and process a purchase that debits the student wallet and credits the canteen. All records persist in PostgreSQL.
+An administrator can register a student, enroll a fingerprint, issue a test credit, register a canteen, and process a purchase that debits the student wallet and credits the canteen. All records persist in PostgreSQL.
 
 ## Out of scope
 

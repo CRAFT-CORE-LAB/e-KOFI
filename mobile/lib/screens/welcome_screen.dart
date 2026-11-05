@@ -6,7 +6,7 @@ import '../state/session.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'register_screen.dart';
-import 'shell_screen.dart';
+import 'session_home.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -44,12 +44,15 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(),
-              const BrandLogo(height: 120),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: BrandLogo(height: 108),
+              ),
               const Spacer(),
               _GetStartedButton(onPressed: (origin) {
                 final session = context.read<SessionController>();
                 if (session.isLoggedIn) {
-                  _open(context, const ShellScreen(), replace: true);
+                  _open(context, const SessionHome(), replace: true);
                   return;
                 }
                 CornerRevealRoute.push(context, page: const RegisterScreen(), origin: origin);

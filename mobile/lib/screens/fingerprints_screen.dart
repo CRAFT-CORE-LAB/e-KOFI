@@ -89,7 +89,7 @@ class _FingerprintsScreenState extends State<FingerprintsScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Plug the Live20R into this phone or the computer, open a student, and capture their finger. No cards are needed.',
+                    'Plug the Live20R into this phone or the computer, open a student, and capture their finger for canteen payments.',
                     style: TextStyle(color: muted, height: 1.4),
                   ),
                   const SizedBox(height: 16),

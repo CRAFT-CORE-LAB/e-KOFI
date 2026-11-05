@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  CardStatus,
   FinancialEventStatus,
   FinancialEventType,
   Prisma,
@@ -14,15 +13,12 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
-import { CardsService } from '../cards/cards.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type PurchaseInput = {
   amountRwf: number;
   canteenId: string;
-  studentId?: string;
-  cardUid?: string;
-  authToken?: string;
+  studentId: string;
   pin?: string;
   description?: string;
   identifiedBy?: string;
@@ -33,6 +29,16 @@ export type PurchaseInput = {
 export type TestCreditInput = {
   studentId: string;
   amountRwf: number;
+  description?: string;
+  idempotencyKey: string;
+  actorId: string;
+};
+
+export type ParentTopUpInput = {
+  studentId: string;
+  grossRwf: number;
+  feeRwf: number;
+  studentCreditRwf: number;
   description?: string;
   idempotencyKey: string;
   actorId: string;
@@ -52,11 +58,93 @@ export class FinanceService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cards: CardsService,
     config: ConfigService,
   ) {
     this.pinMaxAttempts = Number(config.get('PIN_MAX_ATTEMPTS') ?? 5);
     this.pinLockMinutes = Number(config.get('PIN_LOCK_MINUTES') ?? 15);
+  }
+
+  async parentTopUp(input: ParentTopUpInput) {
+    this.assertPositiveAmount(input.grossRwf);
+    if (input.feeRwf < 0 || input.studentCreditRwf < 1 || input.feeRwf + input.studentCreditRwf !== input.grossRwf) {
+      throw new BadRequestException('Top-up split does not add up.');
+    }
+    return this.withIdempotency(input.idempotencyKey, async () => {
+      return this.prisma.$transaction(async (tx) => {
+        const duplicate = await this.findDuplicate(tx, input.idempotencyKey);
+        if (duplicate) return duplicate;
+
+        const student = await tx.student.findUnique({
+          where: { id: input.studentId },
+          include: { wallet: true },
+        });
+        if (!student?.wallet) {
+          throw new NotFoundException('Student wallet not found');
+        }
+        if (student.status !== StudentStatus.ACTIVE) {
+          throw new BadRequestException('Cannot add money to this wallet right now');
+        }
+
+        const feeAccount = await tx.platformFeeAccount.findFirst();
+        if (!feeAccount) {
+          throw new BadRequestException('Platform fee account is not ready.');
+        }
+
+        await tx.wallet.update({
+          where: { id: student.wallet.id },
+          data: { balanceRwf: { increment: input.studentCreditRwf } },
+        });
+        if (input.feeRwf > 0) {
+          await tx.platformFeeAccount.update({
+            where: { id: feeAccount.id },
+            data: { balanceRwf: { increment: input.feeRwf } },
+          });
+        }
+
+        const event = await tx.financialEvent.create({
+          data: {
+            type: FinancialEventType.PARENT_TOPUP,
+            amountRwf: input.grossRwf,
+            description:
+              input.description ??
+              `Parent paid ${input.grossRwf} RWF · ${input.studentCreditRwf} to student · ${input.feeRwf} service fee`,
+            idempotencyKey: input.idempotencyKey,
+            studentId: student.id,
+            walletId: student.wallet.id,
+            createdById: input.actorId,
+            entries: {
+              create: [
+                {
+                  accountType: 'INTOUCH_PAYOUT',
+                  side: 'DEBIT',
+                  amountRwf: input.grossRwf,
+                },
+                {
+                  accountType: 'STUDENT_WALLET',
+                  side: 'CREDIT',
+                  amountRwf: input.studentCreditRwf,
+                  walletId: student.wallet.id,
+                },
+                ...(input.feeRwf > 0
+                  ? [
+                      {
+                        accountType: 'PLATFORM_FEE' as const,
+                        side: 'CREDIT' as const,
+                        amountRwf: input.feeRwf,
+                        platformFeeAccountId: feeAccount.id,
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          },
+          include: { entries: true, student: true, wallet: true },
+        });
+
+        const wallet = await tx.wallet.findUniqueOrThrow({ where: { id: student.wallet.id } });
+        return { event, wallet, feeRwf: input.feeRwf, studentCreditRwf: input.studentCreditRwf };
+      });
+    });
   }
 
   async testCredit(input: TestCreditInput) {
@@ -118,27 +206,13 @@ export class FinanceService {
 
   async purchase(input: PurchaseInput) {
     this.assertPositiveAmount(input.amountRwf);
-    if (!input.studentId && !(input.cardUid && input.authToken)) {
-      throw new BadRequestException('Identify the student with a fingerprint first');
+    if (!input.studentId) {
+      throw new BadRequestException('Student is required');
     }
 
+    const studentId = input.studentId;
+
     return this.withIdempotency(input.idempotencyKey, async () => {
-      let cardId: string | undefined;
-      let studentId = input.studentId;
-
-      if (input.cardUid && input.authToken) {
-        const card = await this.cards.authenticateCard(input.cardUid, input.authToken);
-        cardId = card.id;
-        if (studentId && studentId !== card.studentId) {
-          throw new BadRequestException('Card is not assigned to the selected student');
-        }
-        studentId = card.studentId;
-      }
-
-      if (!studentId) {
-        throw new BadRequestException('Student could not be resolved');
-      }
-
       return this.prisma.$transaction(
         async (tx) => {
           const duplicate = await this.findDuplicate(tx, input.idempotencyKey);
@@ -146,20 +220,13 @@ export class FinanceService {
 
           const student = await tx.student.findUnique({
             where: { id: studentId },
-            include: { wallet: true, cards: true },
+            include: { wallet: true },
           });
           if (!student?.wallet) {
             throw new NotFoundException('Student wallet not found');
           }
           if (student.status !== StudentStatus.ACTIVE) {
             throw new BadRequestException('Student account is deactivated');
-          }
-
-          if (cardId) {
-            const card = student.cards.find((item) => item.id === cardId);
-            if (!card || card.status !== CardStatus.ACTIVE) {
-              throw new BadRequestException('Card is invalid or blocked');
-            }
           }
 
           const canteen = await tx.canteen.findUnique({
@@ -195,7 +262,6 @@ export class FinanceService {
               studentId: student.id,
               walletId: student.wallet.id,
               canteenId: canteen.id,
-              cardId,
               createdById: input.actorId,
               entries: {
                 create: [

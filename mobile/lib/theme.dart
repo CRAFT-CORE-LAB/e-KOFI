@@ -35,6 +35,12 @@ String friendlyRole(String role) {
       return 'Student registration';
     case 'CASHIER':
       return 'Canteen';
+    case 'SUPERADMIN':
+      return 'Owner';
+    case 'PARENT':
+      return 'Parent';
+    case 'STUDENT':
+      return 'Student';
     default:
       return role;
   }
@@ -52,6 +58,8 @@ String friendlyEvent(String type) {
     case 'WALLET_CREDIT':
     case 'CREDIT':
       return 'Top-up';
+    case 'PARENT_TOPUP':
+      return 'Parent top-up';
     case 'FINGERPRINT':
       return 'Fingerprint';
     default:

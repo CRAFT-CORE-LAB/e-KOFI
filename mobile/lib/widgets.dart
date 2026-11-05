@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
+import 'state/session.dart';
 import 'theme.dart';
 
 class BrandLogo extends StatelessWidget {
-  const BrandLogo({super.key, this.height = 56});
+  const BrandLogo({super.key, this.height = 56, this.compact = false});
 
   final double height;
+  /// Icon-only eclipse mark for tight spaces.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/branding/logo.png',
+      compact ? 'assets/branding/mark.png' : 'assets/branding/logo.png',
       height: height,
       fit: BoxFit.contain,
       alignment: Alignment.center,
@@ -264,6 +268,77 @@ class StatusChip extends StatelessWidget {
           color: ok ? navy : const Color(0xFF991B1B),
           fontWeight: FontWeight.w600,
           fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+class OfflineStatusBanner extends StatelessWidget {
+  const OfflineStatusBanner({super.key, this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    final online = session.isOnline;
+    final pending = session.pendingSyncCount;
+    final syncing = session.syncInProgress;
+    if (online && pending == 0 && !session.api.servingFromCache) {
+      return const SizedBox.shrink();
+    }
+    final offline = !online;
+    final color = offline ? const Color(0xFF92400E) : navy;
+    final bg = offline ? const Color(0xFFFFEDD5) : teal.withValues(alpha: 0.18);
+    final title = offline
+        ? 'Offline mode'
+        : syncing
+        ? 'Syncing…'
+        : 'Waiting to sync';
+    final detail = offline
+        ? (pending > 0
+              ? '$pending item${pending == 1 ? '' : 's'} will upload when internet returns.'
+              : 'Showing saved school data. Sign-in needs internet at least once.')
+        : (pending > 0 ? '$pending payment or change not on the server yet.' : 'Using saved data from your last online session.');
+    if (compact) {
+      return Material(
+        color: bg,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Text(
+            offline ? 'Offline · $detail' : detail,
+            style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+        ),
+      );
+    }
+    return Material(
+      color: bg,
+      child: InkWell(
+        onTap: online && pending > 0 && !syncing ? () => session.syncNow() : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Icon(offline ? Icons.cloud_off_outlined : Icons.cloud_sync_outlined, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w800)),
+                    Text(detail, style: TextStyle(color: color.withValues(alpha: 0.9), fontSize: 13, height: 1.3)),
+                  ],
+                ),
+              ),
+              if (online && pending > 0)
+                TextButton(
+                  onPressed: syncing ? null : () => session.syncNow(),
+                  child: Text(syncing ? '…' : 'Sync now'),
+                ),
+            ],
+          ),
         ),
       ),
     );
