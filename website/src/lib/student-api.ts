@@ -1,6 +1,6 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ??
-  'https://api-production-240da.up.railway.app/api';
+  'https://ekofi-api.ekofi.workers.dev/api';
 
 export type StudentProfile = {
   studentCode: string;
@@ -78,6 +78,27 @@ export function loginStudent(studentCode: string, password: string) {
     method: 'POST',
     body: JSON.stringify({ studentCode, password }),
   });
+}
+
+export type TopUpState = {
+  status: 'PENDING' | 'POSTED' | 'FAILED';
+  requestId: string;
+  message: string;
+  grossRwf: number;
+  feeRwf: number;
+  studentCreditRwf: number;
+  balanceRwf?: number;
+};
+
+export function topUpWallet(amountRwf: number, mobilePhone: string, idempotencyKey: string) {
+  return request<TopUpState>('/student-portal/top-up', {
+    method: 'POST',
+    body: JSON.stringify({ amountRwf, mobilePhone, idempotencyKey }),
+  });
+}
+
+export function topUpStatus(requestId: string) {
+  return request<TopUpState>(`/student-portal/top-up/${encodeURIComponent(requestId)}`);
 }
 
 export function fetchStudentWallet() {

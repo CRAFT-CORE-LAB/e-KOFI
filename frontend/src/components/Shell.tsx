@@ -18,6 +18,13 @@ const canteenLinks = [
   { href: '/canteens', label: 'Canteens' },
 ];
 
+const ownerLinks = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/students', label: 'Students' },
+  { href: '/canteens', label: 'Canteens' },
+  { href: '/fees', label: 'Fees' },
+];
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -44,7 +51,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <p className="mt-3 text-sm text-white/70">Safe money. Fast payments.</p>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col">
-          {(user.role === 'ADMIN' ? adminLinks : canteenLinks).map((link) => {
+          {(user.role === 'ADMIN' ? adminLinks : user.role === 'SUPERADMIN' ? ownerLinks : canteenLinks).map((link) => {
             const active = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
             return (
               <Link

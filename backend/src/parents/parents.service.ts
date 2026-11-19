@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { FinancialEventType, StudentStatus } from '@prisma/client';
+import { FinancialEventType, StudentStatus } from '../domain/enums';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -85,7 +85,7 @@ export class ParentsService {
       activity: events.map((event) => ({
         id: event.id,
         type: event.type,
-        label: this.activityLabel(event.type),
+        label: this.activityLabel(event.type, event.description),
         amountRwf: this.creditedAmount(event.type, event.amountRwf, event.description),
         when: event.createdAt.toISOString(),
         canteenName: event.canteen?.name ?? null,
@@ -109,10 +109,10 @@ export class ParentsService {
     return match ? Number(match[1]) : amountRwf;
   }
 
-  private activityLabel(type: FinancialEventType) {
+  private activityLabel(type: FinancialEventType, description?: string | null) {
     switch (type) {
       case FinancialEventType.PARENT_TOPUP:
-        return 'You added money';
+        return description?.startsWith('Student paid') ? 'Your child added money' : 'You added money';
       case FinancialEventType.TEST_CREDIT:
         return 'Money added at school';
       case FinancialEventType.PURCHASE:

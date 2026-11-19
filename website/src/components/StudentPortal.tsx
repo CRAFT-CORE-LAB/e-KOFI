@@ -12,10 +12,14 @@ import {
   StudentActivity,
   StudentProfile,
   studentToken,
+  topUpStatus,
+  topUpWallet,
   whenLabel,
 } from '@/lib/student-api';
 
 type Step = 'start' | 'register' | 'login' | 'home';
+
+const amounts = [1000, 2000, 5000, 10000, 20000];
 
 const inputClass =
   'h-16 rounded-2xl border-2 border-navy/15 px-5 text-xl outline-none focus:border-teal';
@@ -31,6 +35,8 @@ export function StudentPortal() {
   const [student, setStudent] = useState<StudentProfile | null>(null);
   const [balance, setBalance] = useState(0);
   const [activity, setActivity] = useState<StudentActivity[]>([]);
+  const [phone, setPhone] = useState('');
+  const [amount, setAmount] = useState(5000);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +124,42 @@ export function StudentPortal() {
       setPassword('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in did not work. Check your password.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onTopUp(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMessage('Approve the message on your phone. This page will update when the payment is finished.');
+    try {
+      let result = await topUpWallet(amount, phone, crypto.randomUUID());
+      const started = Date.now();
+      while (result.status === 'PENDING' && Date.now() - started < 120000) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        result = await topUpStatus(result.requestId);
+      }
+      if (result.status === 'PENDING') {
+        setMessage('Still waiting for approval on your phone. You can leave this page and come back.');
+        return;
+      }
+      if (result.status === 'FAILED') {
+        setMessage(null);
+        setError(result.message || 'The payment was not approved.');
+        return;
+      }
+      if (typeof result.balanceRwf === 'number') setBalance(result.balanceRwf);
+      const wallet = await fetchStudentWallet();
+      setBalance(wallet.balanceRwf);
+      setActivity(wallet.activity);
+      setMessage(
+        `${rwf(result.studentCreditRwf)} is now on your wallet. Service fee ${rwf(result.feeRwf)}.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Top-up did not finish.');
+      setMessage(null);
     } finally {
       setBusy(false);
     }
@@ -286,6 +328,7 @@ export function StudentPortal() {
       {message ? (
         <p className="mt-6 rounded-2xl bg-teal/15 px-5 py-4 text-lg font-medium text-navy">{message}</p>
       ) : null}
+      {error ? <p className="mt-6 rounded-2xl bg-red-50 px-5 py-4 text-lg text-red-800">{error}</p> : null}
 
       <section className="mt-8 rounded-3xl border border-navy/10 bg-white p-8">
         <p className="text-lg text-navy/70">Money for meals</p>
@@ -293,9 +336,46 @@ export function StudentPortal() {
       </section>
 
       <section className="mt-8 rounded-3xl border border-navy/10 bg-white p-8">
+        <h2 className="text-2xl font-bold">Add money</h2>
+        <p className="mt-2 text-lg leading-8 text-navy/75">
+          Pick an amount, enter your MTN or Airtel number, and approve the payment on your phone.
+        </p>
+        <form className="mt-6 grid gap-5" onSubmit={onTopUp}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {amounts.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setAmount(value)}
+                className={`h-14 rounded-2xl border-2 text-lg font-semibold ${
+                  amount === value ? 'border-teal bg-teal/15 text-navy' : 'border-navy/10 bg-cream text-navy'
+                }`}
+              >
+                {rwf(value)}
+              </button>
+            ))}
+          </div>
+          <label className="grid gap-2">
+            <span className="text-lg font-semibold">Your mobile money number</span>
+            <input
+              className={inputClass}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="078… or 073…"
+              inputMode="tel"
+              required
+            />
+          </label>
+          <button type="submit" disabled={busy} className={btnPrimary}>
+            {busy ? 'Waiting for your phone…' : `Add ${rwf(amount)} to wallet`}
+          </button>
+        </form>
+      </section>
+
+      <section className="mt-8 rounded-3xl border border-navy/10 bg-white p-8">
         <h2 className="text-2xl font-bold">Money added</h2>
         {credits.length === 0 ? (
-          <p className="mt-3 text-lg text-navy/70">When parents or the school add money, it shows here.</p>
+          <p className="mt-3 text-lg text-navy/70">When you or a parent add money, it shows here.</p>
         ) : (
           <ul className="mt-4 grid gap-3">
             {credits.map((row) => (

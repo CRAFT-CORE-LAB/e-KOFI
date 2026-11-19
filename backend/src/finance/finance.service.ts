@@ -5,15 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  FinancialEventStatus,
-  FinancialEventType,
-  Prisma,
-  StudentStatus,
-} from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
+import { FinancialEventStatus, FinancialEventType, StudentStatus } from '../domain/enums';
+import { usingD1 } from '../prisma/d1-batch';
 import { PrismaService } from '../prisma/prisma.service';
+import { d1ParentTopUp, d1Purchase, d1Reverse, d1TestCredit } from './finance-d1';
 
 export type PurchaseInput = {
   amountRwf: number;
@@ -70,6 +68,7 @@ export class FinanceService {
       throw new BadRequestException('Top-up split does not add up.');
     }
     return this.withIdempotency(input.idempotencyKey, async () => {
+      if (usingD1()) return d1ParentTopUp(this.prisma, input);
       return this.prisma.$transaction(async (tx) => {
         const duplicate = await this.findDuplicate(tx, input.idempotencyKey);
         if (duplicate) return duplicate;
@@ -150,6 +149,7 @@ export class FinanceService {
   async testCredit(input: TestCreditInput) {
     this.assertPositiveAmount(input.amountRwf);
     return this.withIdempotency(input.idempotencyKey, async () => {
+      if (usingD1()) return d1TestCredit(this.prisma, input);
       return this.prisma.$transaction(async (tx) => {
         const duplicate = await this.findDuplicate(tx, input.idempotencyKey);
         if (duplicate) return duplicate;
@@ -213,6 +213,7 @@ export class FinanceService {
     const studentId = input.studentId;
 
     return this.withIdempotency(input.idempotencyKey, async () => {
+      if (usingD1()) return d1Purchase(this.prisma, input);
       return this.prisma.$transaction(
         async (tx) => {
           const duplicate = await this.findDuplicate(tx, input.idempotencyKey);
@@ -297,6 +298,7 @@ export class FinanceService {
 
   async reverse(input: ReverseInput) {
     return this.withIdempotency(input.idempotencyKey, async () => {
+      if (usingD1()) return d1Reverse(this.prisma, input);
       return this.prisma.$transaction(async (tx) => {
         const duplicate = await this.findDuplicate(tx, input.idempotencyKey);
         if (duplicate) return duplicate;

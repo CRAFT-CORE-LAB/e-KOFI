@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
+import '../export_csv.dart';
 import '../models.dart';
 import '../state/session.dart';
 import '../theme.dart';
@@ -17,6 +18,7 @@ class TransactionsScreen extends StatefulWidget {
 class _TransactionsScreenState extends State<TransactionsScreen> {
   List<LedgerEvent> items = [];
   bool loading = true;
+  bool downloading = false;
 
   @override
   void initState() {
@@ -35,19 +37,61 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  Future<void> _download() async {
+    setState(() => downloading = true);
+    final day = DateTime.now().toIso8601String().substring(0, 10);
+    final filename = 'ekofi-paid-meals-$day.csv';
+    try {
+      final csv = await context.read<SessionController>().api.paidMealsCsv();
+      await shareCsv(csv, filename);
+    } on ApiException catch (error) {
+      final local = paidMealsCsvFromEvents(items);
+      final hasPaid = items.any((event) => event.type == 'PURCHASE' && event.status != 'REVERSED');
+      if (!hasPaid) {
+        if (mounted) showError(context, error);
+      } else {
+        await shareCsv(local, filename);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Downloaded the paid meals saved on this phone.')),
+          );
+        }
+      }
+    } finally {
+      if (mounted) setState(() => downloading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final downloadButton = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: downloading ? null : _download,
+          icon: downloading
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.download_outlined),
+          label: Text(downloading ? 'Preparing file…' : 'Download paid meal history'),
+        ),
+      ),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Paid')),
       body: loading
           ? const LoadingView()
-          : items.isEmpty
-          ? const EmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: 'No payments yet',
-              message: 'Meal payments and refunds will appear here.',
-            )
-          : RefreshIndicator(
+          : Column(
+              children: [
+                downloadButton,
+                Expanded(
+                  child: items.isEmpty
+                      ? const EmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'No payments yet',
+                          message: 'Meal payments and refunds will appear here.',
+                        )
+                      : RefreshIndicator(
               color: teal,
               onRefresh: _load,
               child: ListView.separated(
@@ -87,6 +131,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 },
               ),
             ),
+          ),
+        ],
+      ),
     );
   }
 }

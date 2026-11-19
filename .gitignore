@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .next/
+.open-next/
+.wrangler/
 out/
 coverage/
 .env
@@ -15,6 +17,7 @@ android/build/
 android/local.properties
 android/*.iml
 backend/generated/
+backend/src/generated/
 backend/.pgdata/
 frontend/.turbo/
 *.tsbuildinfo

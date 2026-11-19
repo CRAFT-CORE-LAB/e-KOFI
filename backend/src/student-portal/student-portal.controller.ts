@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { StudentCodeDto } from './dto/student-code.dto';
 import { StudentLoginDto } from './dto/student-login.dto';
 import { StudentRegisterDto } from './dto/student-register.dto';
+import { StudentTopUpDto } from './dto/student-topup.dto';
 import { StudentSession, StudentSessionGuard } from './student-session.guard';
 import { StudentPortalService } from './student-portal.service';
 
@@ -35,5 +36,19 @@ export class StudentPortalController {
   @SkipThrottle()
   wallet(@Req() req: StudentRequest) {
     return this.portal.getWallet(req.student.studentId);
+  }
+
+  @Post('top-up')
+  @UseGuards(StudentSessionGuard)
+  @Throttle({ default: { limit: 8, ttl: 60000 } })
+  topUp(@Req() req: StudentRequest, @Body() dto: StudentTopUpDto) {
+    return this.portal.topUp(req.student.studentId, dto.amountRwf, dto.mobilePhone, dto.idempotencyKey);
+  }
+
+  @Get('top-up/:requestId')
+  @UseGuards(StudentSessionGuard)
+  @SkipThrottle()
+  topUpStatus(@Req() req: StudentRequest, @Param('requestId') requestId: string) {
+    return this.portal.topUpStatus(req.student.studentId, requestId);
   }
 }

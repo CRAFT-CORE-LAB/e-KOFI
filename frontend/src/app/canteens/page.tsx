@@ -45,7 +45,7 @@ export default function CanteensPage() {
 
   return (
     <Shell>
-      <PageHeader title="Canteens" subtitle="Internal earnings accounts. Withdrawals are not part of Phase 1." />
+      <PageHeader title="Canteens" subtitle="Meal earnings. Open a canteen to send the balance to mobile money." />
       <Card className="mb-6">
         <Form onSubmit={create}>
           <Field label="Name">

@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { FinancialEventType, StudentStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import { FinancialEventType, StudentStatus } from '../domain/enums';
+import * as bcrypt from 'bcryptjs';
+import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class StudentPortalService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly payments: PaymentsService,
   ) {}
 
   normalizeCode(raw: string) {
@@ -158,7 +160,7 @@ export class StudentPortalService {
       activity: events.map((event) => ({
         id: event.id,
         type: event.type,
-        label: this.activityLabel(event.type),
+        label: this.activityLabel(event.type, event.description),
         amountRwf:
           event.type === FinancialEventType.PARENT_TOPUP && event.description?.match(/(\d+) to student/)
             ? Number(event.description.match(/(\d+) to student/)?.[1])
@@ -195,10 +197,19 @@ export class StudentPortalService {
     };
   }
 
-  private activityLabel(type: FinancialEventType) {
+  topUp(studentId: string, amountRwf: number, mobilePhone: string, idempotencyKey?: string) {
+    const key = idempotencyKey ?? `${Date.now()}-${studentId.slice(0, 8)}`;
+    return this.payments.startParentTopUp(studentId, amountRwf, mobilePhone, key, 'student');
+  }
+
+  topUpStatus(studentId: string, requestId: string) {
+    return this.payments.refresh(requestId, studentId);
+  }
+
+  private activityLabel(type: FinancialEventType, description?: string | null) {
     switch (type) {
       case FinancialEventType.PARENT_TOPUP:
-        return 'Money added (parent)';
+        return description?.startsWith('Student paid') ? 'You added money' : 'Money added (parent)';
       case FinancialEventType.TEST_CREDIT:
         return 'Money added at school';
       case FinancialEventType.PURCHASE:

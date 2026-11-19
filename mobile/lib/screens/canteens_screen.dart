@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
+import '../export_csv.dart';
 import '../models.dart';
 import '../state/session.dart';
 import '../theme.dart';
@@ -144,6 +145,26 @@ class CanteenDetailScreen extends StatefulWidget {
 
 class _CanteenDetailScreenState extends State<CanteenDetailScreen> {
   Canteen? canteen;
+  bool downloading = false;
+
+  Future<void> _download() async {
+    setState(() => downloading = true);
+    final day = DateTime.now().toIso8601String().substring(0, 10);
+    final filename = 'ekofi-paid-meals-$day.csv';
+    try {
+      final csv = await context.read<SessionController>().api.paidMealsCsv(canteenId: widget.canteenId);
+      await shareCsv(csv, filename);
+    } on ApiException catch (error) {
+      final history = canteen?.history ?? const <LedgerEvent>[];
+      if (!history.any((event) => event.type == 'PURCHASE' && event.status != 'REVERSED')) {
+        if (mounted) showError(context, error);
+      } else {
+        await shareCsv(paidMealsCsvFromEvents(history), filename);
+      }
+    } finally {
+      if (mounted) setState(() => downloading = false);
+    }
+  }
 
   @override
   void initState() {
@@ -176,6 +197,15 @@ class _CanteenDetailScreenState extends State<CanteenDetailScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: downloading ? null : _download,
+                    icon: const Icon(Icons.download_outlined),
+                    label: Text(downloading ? 'Preparing file…' : 'Download paid meal history'),
                   ),
                 ),
                 const SizedBox(height: 20),

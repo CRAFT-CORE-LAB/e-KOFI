@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
-import { FingerPosition } from '@prisma/client';
+import { FingerPosition } from '../../domain/enums';
 
 export class EnrollFingerprintDto {
   @IsUUID()

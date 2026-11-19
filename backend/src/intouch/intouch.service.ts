@@ -27,7 +27,7 @@ export class IntouchService {
     if (explicit) return explicit;
     const base =
       this.config.get<string>('PUBLIC_API_URL')?.trim() ||
-      'https://api-production-240da.up.railway.app/api';
+      'https://ekofi-api.ekofi.workers.dev/api';
     return `${base.replace(/\/$/, '')}/intouch/callback`;
   }
 
@@ -70,9 +70,10 @@ export class IntouchService {
     };
   }
 
-  async getTransactionStatus(requestId: string): Promise<IntouchStatus> {
+  async getTransactionStatus(requestId: string, transactionId?: string | null): Promise<IntouchStatus> {
     const data = await this.post('gettransactionstatus', {
       requesttransactionid: requestId,
+      ...(transactionId ? { transactionid: transactionId } : {}),
     });
     return this.readStatus(data);
   }
@@ -101,21 +102,22 @@ export class IntouchService {
     const statusText = String(payload.status ?? '');
     const statusDesc = payload.statusdesc ? String(payload.statusdesc) : payload.message ? String(payload.message) : null;
     const lowered = `${statusText} ${statusDesc ?? ''}`.toLowerCase();
+    const negative =
+      lowered.includes('unsuccess') ||
+      lowered.includes('fail') ||
+      lowered.includes('declin') ||
+      lowered.includes('cancel');
     const success =
       responseCode === '01' ||
-      lowered.includes('successfull') ||
-      lowered.includes('successful') ||
-      lowered.includes('successfully processed');
+      (responseCode === '2001' && payload.success === true) ||
+      (!negative &&
+        (lowered.includes('successfull') ||
+          lowered.includes('successful') ||
+          lowered.includes('successfully processed')));
     const pending =
       !success &&
-      (responseCode === '1000' ||
-        lowered.includes('pending') ||
-        lowered.includes('processing') ||
-        payload.success === true && !lowered.includes('fail'));
-    const failed =
-      !success &&
-      !pending &&
-      (lowered.includes('fail') || lowered.includes('declin') || lowered.includes('cancel') || payload.success === false);
+      (responseCode === '1000' || lowered.includes('pending') || lowered.includes('processing'));
+    const failed = !success && !pending && (payload.success === false || negative);
     return {
       pending: pending && !success,
       success,
@@ -147,20 +149,23 @@ export class IntouchService {
     const password = createHash('sha256')
       .update(`${this.username}${this.accountNo}${this.partnerPassword}${timestamp}`)
       .digest('hex');
-    const body = {
+    const form = new URLSearchParams({
       username: this.username,
       accountno: this.accountNo,
       timestamp,
       password,
-      ...extra,
-    };
+    });
+    for (const [key, value] of Object.entries(extra)) {
+      if (value === undefined || value === null) continue;
+      form.set(key, String(value));
+    }
     const url = `${this.baseUrl}/${action}/`;
     let response: Response;
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
       });
     } catch {
       throw new BadRequestException('Could not reach Intouch Pay. Try again in a moment.');

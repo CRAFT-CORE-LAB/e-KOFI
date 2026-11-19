@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ContactDetails } from '@/components/ContactDetails';
 import { SocialLinks } from '@/components/SocialLinks';
+import { contact } from '@/lib/contact';
 import { nav } from '@/lib/nav';
 
 export function Footer() {
@@ -11,6 +12,13 @@ export function Footer() {
           <img src="/logo.png" alt="e-KOFI" className="h-12 w-auto" />
           <p className="mt-4 max-w-sm text-sm leading-6 text-muted">
             Safe Money. Fast Payments. Made for Students.
+          </p>
+          <p className="mt-4 max-w-xs text-sm leading-6 text-muted">
+            <span className="font-semibold text-navy">{contact.place}</span>
+            <br />
+            {contact.street}, {contact.district}
+            <br />
+            {contact.city}
           </p>
           <SocialLinks className="mt-6" />
         </div>

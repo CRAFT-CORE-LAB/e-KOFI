@@ -22,7 +22,9 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "prisma:generate": "prisma generate",
-    "db:up": "node scripts/local-postgres.mjs"
+    "db:up": "node scripts/local-postgres.mjs",
+    "cf:client": "prisma generate --schema=prisma/schema.d1.prisma && node scripts/patch-d1-client.mjs",
+    "deploy": "npm run cf:client && npm run build && wrangler deploy"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
@@ -35,8 +37,10 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/throttler": "^6.4.0",
+    "@prisma/adapter-d1": "^7.10.1",
     "@prisma/client": "^6.16.2",
     "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "passport": "^0.7.0",
@@ -51,6 +55,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
@@ -70,7 +75,8 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "wrangler": "^4.165.0"
   },
   "optionalDependencies": {
     "@embedded-postgres/windows-x64": "^18.4.0-beta.17",

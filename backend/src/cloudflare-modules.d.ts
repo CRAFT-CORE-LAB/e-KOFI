@@ -1,0 +1,34 @@
+declare module 'cloudflare:workers' {
+  export const env: CloudflareEnv;
+}
+
+declare module 'cloudflare:node' {
+  export function httpServerHandler(input: { port: number }): {
+    fetch(request: Request, env: unknown, ctx: unknown): Promise<Response>;
+  };
+}
+
+interface CloudflareEnv {
+  DB: D1Binding;
+  JWT_SECRET?: string;
+  CARD_TOKEN_PEPPER?: string;
+  PUBLIC_API_URL?: string;
+  NODE_ENV?: string;
+  INTOUCH_ENV?: string;
+  INTOUCH_USERNAME?: string;
+  INTOUCH_ACCOUNT_NO?: string;
+  INTOUCH_PARTNER_PASSWORD?: string;
+  INTOUCH_CALLBACK_URL?: string;
+  PIN_MAX_ATTEMPTS?: string;
+  PIN_LOCK_MINUTES?: string;
+}
+
+interface D1Binding {
+  prepare(query: string): D1Prepared;
+  batch(statements: D1Prepared[]): Promise<unknown[]>;
+  exec(query: string): Promise<unknown>;
+}
+
+interface D1Prepared {
+  bind(...values: unknown[]): D1Prepared;
+}

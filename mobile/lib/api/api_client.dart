@@ -53,9 +53,9 @@ class ApiClient {
   bool syncInProgress = false;
   String? lastSyncMessage;
 
-  static const railwayApiUrl = 'https://api-production-240da.up.railway.app/api';
+  static const cloudflareApiUrl = 'https://ekofi-api.ekofi.workers.dev/api';
 
-  static String defaultApiUrl() => railwayApiUrl;
+  static String defaultApiUrl() => cloudflareApiUrl;
 
   static bool _isLocalApiUrl(String url) {
     return url.contains('10.0.2.2') ||
@@ -1123,6 +1123,39 @@ class ApiClient {
     final merged = [...localEvents.where((e) => !ids.contains(e.id)), ...server];
     merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return merged;
+  }
+
+  Future<String> paidMealsCsv({String? canteenId}) async {
+    final params = <String, String>{};
+    if (canteenId != null && canteenId.isNotEmpty) params['canteenId'] = canteenId;
+    final uri = Uri.parse('$baseUrl/transactions/export').replace(
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final headers = <String, String>{};
+    if (token != null) headers['Authorization'] = 'Bearer $token';
+    http.Response response;
+    try {
+      response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 20));
+    } catch (_) {
+      throw ApiException('Unable to connect right now. Check your internet and try again.');
+    }
+    if (response.statusCode == 401) {
+      await logout();
+      onAuthLost?.call();
+      throw ApiException('Please sign in again.', 401);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var message = 'Could not download paid meals.';
+      try {
+        final data = jsonDecode(response.body);
+        if (data is Map && data['message'] != null) {
+          final value = data['message'];
+          message = value is List ? value.join(', ') : value.toString();
+        }
+      } catch (_) {}
+      throw ApiException(message, response.statusCode);
+    }
+    return response.body;
   }
 
   Future<LedgerEvent> transaction(String id) async {

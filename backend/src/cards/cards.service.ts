@@ -6,7 +6,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CardStatus, Prisma, StudentStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { CardStatus, StudentStatus } from '../domain/enums';
 import { generateCardToken, hashCardToken, tokensEqual } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlockCardDto } from './dto/block-card.dto';

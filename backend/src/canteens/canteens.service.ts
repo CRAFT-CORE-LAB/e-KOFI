@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { FinancialEventType, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { FinancialEventType } from '../domain/enums';
 import { randomUUID } from 'crypto';
 import { IntouchService } from '../intouch/intouch.service';
 import { PrismaService } from '../prisma/prisma.service';

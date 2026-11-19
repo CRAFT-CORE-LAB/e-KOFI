@@ -1,5 +1,5 @@
 import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, Matches, MinLength } from 'class-validator';
-import { StudentStatus } from '@prisma/client';
+import { StudentStatus } from '../../domain/enums';
 
 export class UpdateStudentDto {
   @IsOptional()

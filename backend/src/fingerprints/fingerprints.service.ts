@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { FingerPosition } from '@prisma/client';
+import { FingerPosition } from '../domain/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnrollFingerprintDto } from './dto/enroll-fingerprint.dto';
 

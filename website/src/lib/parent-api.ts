@@ -1,6 +1,6 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ??
-  'https://api-production-240da.up.railway.app/api';
+  'https://ekofi-api.ekofi.workers.dev/api';
 
 export type ParentStudent = {
   studentCode: string;

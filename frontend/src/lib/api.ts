@@ -60,3 +60,43 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const money = (amount: number) =>
   `${amount.toLocaleString('en-RW')} RWF`;
+
+export async function downloadApiFile(path: string, filename: string) {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { headers });
+  } catch {
+    throw new ApiError(
+      0,
+      `Cannot reach the API at ${API_URL}. Start PostgreSQL and the backend (port 3001), then try again.`,
+    );
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    let message = response.statusText;
+    try {
+      const data = text ? JSON.parse(text) : null;
+      message =
+        data?.message?.toString?.() ??
+        (Array.isArray(data?.message) ? data.message.join(', ') : null) ??
+        message;
+    } catch {
+      if (text) message = text;
+    }
+    throw new ApiError(response.status, message);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

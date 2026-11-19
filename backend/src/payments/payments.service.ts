@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentIntent, PaymentIntentStatus } from '@prisma/client';
+import { PaymentIntent } from '@prisma/client';
+import { PaymentIntentStatus } from '../domain/enums';
 import { FinanceService } from '../finance/finance.service';
 import { IntouchService, IntouchStatus } from '../intouch/intouch.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,7 +18,13 @@ export class PaymentsService {
     private readonly config: ConfigService,
   ) {}
 
-  async startParentTopUp(studentId: string, grossRwf: number, mobilePhone: string, idempotencyKey: string) {
+  async startParentTopUp(
+    studentId: string,
+    grossRwf: number,
+    mobilePhone: string,
+    idempotencyKey: string,
+    payer: 'parent' | 'student' = 'parent',
+  ) {
     if (!Number.isInteger(grossRwf) || grossRwf < 500 || grossRwf > 500000) {
       throw new BadRequestException('Enter an amount between 500 and 500,000 RWF.');
     }
@@ -47,6 +54,7 @@ export class PaymentsService {
         feeRwf,
         studentCreditRwf,
         phone,
+        payer,
       },
     });
 
@@ -74,12 +82,17 @@ export class PaymentsService {
     }
 
     await this.ensureFeeAccount();
-    const started = await this.intouch.requestPayment(
-      grossRwf,
-      phone,
-      idempotencyKey,
-      'e-KOFI lunch money',
-    );
+    let started: Awaited<ReturnType<IntouchService['requestPayment']>>;
+    try {
+      started = await this.intouch.requestPayment(grossRwf, phone, idempotencyKey, 'e-KOFI lunch money');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Mobile money could not start the payment.';
+      await this.prisma.paymentIntent.update({
+        where: { id: intent.id },
+        data: { status: PaymentIntentStatus.FAILED, statusDesc: message },
+      });
+      throw error;
+    }
     await this.prisma.paymentIntent.update({
       where: { id: intent.id },
       data: {
@@ -112,7 +125,7 @@ export class PaymentsService {
     if (!this.intouch.configured()) {
       return this.view(intent);
     }
-    const status = await this.intouch.getTransactionStatus(requestId);
+    const status = await this.intouch.getTransactionStatus(requestId, intent.intouchRef);
     if (status.success) return this.applySuccess(intent, status);
     if (status.failed) {
       const failed = await this.prisma.paymentIntent.update({
@@ -265,7 +278,7 @@ export class PaymentsService {
       studentCreditRwf: current.studentCreditRwf,
       idempotencyKey: current.idempotencyKey,
       actorId,
-      description: `Parent paid ${current.grossRwf} RWF · ${current.studentCreditRwf} to student · ${current.feeRwf} service fee`,
+      description: `${current.payer === 'student' ? 'Student' : 'Parent'} paid ${current.grossRwf} RWF · ${current.studentCreditRwf} to student · ${current.feeRwf} service fee`,
     });
     const updated = await this.prisma.paymentIntent.update({
       where: { id: current.id },

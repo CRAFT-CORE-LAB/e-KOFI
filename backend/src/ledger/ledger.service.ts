@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { FinancialEventStatus, FinancialEventType } from '../domain/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { toPaidMealsCsv } from './paid-meals-csv';
 
 const eventInclude = {
   entries: true,
@@ -32,5 +34,29 @@ export class LedgerService {
       where: { id },
       include: eventInclude,
     });
+  }
+
+  async paidMealsCsv(canteenId?: string) {
+    const events = await this.prisma.financialEvent.findMany({
+      where: {
+        type: FinancialEventType.PURCHASE,
+        status: FinancialEventStatus.POSTED,
+        ...(canteenId ? { canteenId } : {}),
+      },
+      include: eventInclude,
+      orderBy: { createdAt: 'asc' },
+      take: 10000,
+    });
+    return toPaidMealsCsv(
+      events.map((event) => ({
+        createdAt: event.createdAt,
+        studentCode: event.student?.studentCode ?? '',
+        studentName: event.student ? `${event.student.firstName} ${event.student.lastName}`.trim() : '',
+        canteenName: event.canteen?.name ?? '',
+        amountRwf: event.amountRwf,
+        description: event.description ?? '',
+        recordedBy: event.createdBy?.name ?? '',
+      })),
+    );
   }
 }

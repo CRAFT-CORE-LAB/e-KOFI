@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>e-KOFI pull-up banner — print (85 cm × 200 cm)</title>
+    <style>
+      @page {
+        size: 85cm 200cm;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 85cm;
+        height: 200cm;
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      img {
+        display: block;
+        width: 85cm;
+        height: 200cm;
+        object-fit: fill;
+      }
+
+      @media screen {
+        body {
+          margin: 12px auto;
+          box-shadow: 0 8px 32px rgba(15, 31, 58, 0.12);
+        }
+
+        .hint {
+          position: fixed;
+          top: 12px;
+          left: 12px;
+          max-width: 22rem;
+          padding: 10px 12px;
+          font: 13px/1.45 system-ui, sans-serif;
+          color: #0c1a3a;
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+        }
+
+        @media print {
+          .hint {
+            display: none;
+          }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <p class="hint">
+      Print this page at <strong>100% scale</strong>, no margins (85 cm × 200 cm). Only the banner artwork prints — no
+      room or stand.
+    </p>
+    <img src="assets/ekofi-pullup-banner-print.jpg" alt="e-KOFI pull-up banner artwork" />
+  </body>
+</html>

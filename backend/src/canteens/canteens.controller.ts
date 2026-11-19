@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { UserRole } from '../domain/enums';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -20,7 +20,7 @@ export class CanteensController {
   }
 
   @Post(':id/withdraw')
-  @Roles(UserRole.CASHIER)
+  @Roles(UserRole.CASHIER, UserRole.SUPERADMIN)
   withdraw(
     @Param('id') id: string,
     @Body() dto: WithdrawCanteenDto,

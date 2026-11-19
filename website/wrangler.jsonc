@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ekofi-website",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-19",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "ekofi-website"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "workers_dev": true
+  // Attach once e-kofi.com is in this Cloudflare account:
+  // "routes": [
+  //   { "pattern": "e-kofi.com", "custom_domain": true },
+  //   { "pattern": "www.e-kofi.com", "custom_domain": true }
+  // ]
+}

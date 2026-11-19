@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { StudentStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import { StudentStatus } from '../domain/enums';
+import * as bcrypt from 'bcryptjs';
 import { FinanceService } from './finance.service';
 
 type Wallet = { id: string; studentId: string; balanceRwf: number };

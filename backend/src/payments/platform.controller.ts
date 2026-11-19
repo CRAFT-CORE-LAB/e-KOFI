@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { UserRole } from '../domain/enums';
 import { IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../auth/current-user.decorator';

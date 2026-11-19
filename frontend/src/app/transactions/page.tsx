@@ -3,13 +3,27 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Shell } from '@/components/Shell';
-import { Badge, Card, PageHeader } from '@/components/Ui';
-import { api, money } from '@/lib/api';
+import { Badge, Button, Card, PageHeader } from '@/components/Ui';
+import { api, downloadApiFile, money } from '@/lib/api';
 import { LedgerEvent } from '@/lib/types';
 
 export default function TransactionsPage() {
   const [events, setEvents] = useState<LedgerEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadPaid() {
+    setDownloading(true);
+    try {
+      const day = new Date().toISOString().slice(0, 10);
+      await downloadApiFile('/transactions/export', `ekofi-paid-meals-${day}.csv`);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download paid meals');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   useEffect(() => {
     api<LedgerEvent[]>('/transactions')
@@ -19,7 +33,15 @@ export default function TransactionsPage() {
 
   return (
     <Shell>
-      <PageHeader title="Transaction history" subtitle="Posted ledger events. Entries cannot be edited or deleted." />
+      <PageHeader
+        title="Transaction history"
+        subtitle="Download paid canteen meals as a spreadsheet. Posted entries cannot be edited or deleted."
+        action={
+          <Button variant="secondary" onClick={downloadPaid} disabled={downloading}>
+            {downloading ? 'Preparing…' : 'Download paid meals'}
+          </Button>
+        }
+      />
       {error ? <p className="text-red-700">{error}</p> : null}
       <Card>
         <div className="overflow-x-auto">

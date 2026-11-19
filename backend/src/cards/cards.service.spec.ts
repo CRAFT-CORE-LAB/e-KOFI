@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CardStatus, StudentStatus } from '@prisma/client';
+import { CardStatus, StudentStatus } from '../domain/enums';
 import { CardsService } from './cards.service';
 
 describe('CardsService', () => {

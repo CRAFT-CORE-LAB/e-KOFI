@@ -4,8 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, StudentStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { StudentStatus } from '../domain/enums';
+import { deleteStudentGraph, usingD1 } from '../prisma/d1-batch';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
@@ -39,10 +41,13 @@ export class StudentsService {
     }
     if (query?.trim()) {
       const q = query.trim();
+      const contains = usingD1()
+        ? { contains: q }
+        : { contains: q, mode: 'insensitive' as const };
       where.OR = [
-        { studentCode: { contains: q, mode: 'insensitive' } },
-        { firstName: { contains: q, mode: 'insensitive' } },
-        { lastName: { contains: q, mode: 'insensitive' } },
+        { studentCode: contains },
+        { firstName: contains },
+        { lastName: contains },
       ];
     }
     const students = await this.prisma.student.findMany({
@@ -142,14 +147,18 @@ export class StudentsService {
       return this.deactivate(id);
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.fingerprintTemplate.deleteMany({ where: { studentId: id } });
-      await tx.nfcCard.deleteMany({ where: { studentId: id } });
-      if (existing.wallet) {
-        await tx.wallet.delete({ where: { id: existing.wallet.id } });
-      }
-      await tx.student.delete({ where: { id } });
-    });
+    if (usingD1()) {
+      await deleteStudentGraph(id);
+    } else {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.fingerprintTemplate.deleteMany({ where: { studentId: id } });
+        await tx.nfcCard.deleteMany({ where: { studentId: id } });
+        if (existing.wallet) {
+          await tx.wallet.delete({ where: { id: existing.wallet.id } });
+        }
+        await tx.student.delete({ where: { id } });
+      });
+    }
 
     return { id, studentCode: existing.studentCode, removed: true };
   }

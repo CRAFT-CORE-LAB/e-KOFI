@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ekofi-api",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "rules": [
+    { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }
+  ],
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "define": {
+    "__dirname": "\"/\"",
+    "__filename": "\"/worker.js\""
+  },
+  "alias": {
+    "@prisma/client": "./src/generated/d1",
+    "@nestjs/websockets/socket-module": "./shims/empty.cjs",
+    "@nestjs/websockets": "./shims/empty.cjs",
+    "@nestjs/microservices": "./shims/empty.cjs",
+    "@nestjs/microservices/microservices-module": "./shims/empty.cjs"
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "PUBLIC_API_URL": "https://ekofi-api.ekofi.workers.dev/api"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ekofi",
+      "database_id": "0a3cee12-a7bf-4e17-bbdd-2f8f11938eb8"
+    }
+  ]
+}

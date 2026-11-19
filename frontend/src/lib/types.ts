@@ -2,7 +2,7 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
-  role: 'ADMIN' | 'CASHIER';
+  role: 'ADMIN' | 'CASHIER' | 'SUPERADMIN';
 };
 
 export type School = {
@@ -48,7 +48,7 @@ export type LedgerEntry = {
 
 export type LedgerEvent = {
   id: string;
-  type: 'TEST_CREDIT' | 'PURCHASE' | 'REVERSAL';
+  type: 'TEST_CREDIT' | 'PARENT_TOPUP' | 'PURCHASE' | 'REVERSAL' | 'CANTEEN_WITHDRAWAL' | 'PLATFORM_WITHDRAWAL';
   status: 'POSTED' | 'REVERSED';
   amountRwf: number;
   description?: string | null;
