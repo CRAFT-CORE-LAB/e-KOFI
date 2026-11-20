@@ -17,7 +17,6 @@
   "observability": {
     "enabled": true
   },
-  "workers_dev": true
-  // Attach once e-kofi.com is in this Cloudflare account:
-  // "routes": [{ "pattern": "app.e-kofi.com", "custom_domain": true }]
+  "workers_dev": true,
+  "routes": [{ "pattern": "app.e-kofi.com", "custom_domain": true }]
 }
