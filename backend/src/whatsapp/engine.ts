@@ -124,7 +124,11 @@ async function offerKnown(
     };
     return {
       session: next,
-      text: copy.offerStudent(students[0], next.amountRwf),
+      text: copy.offerStudent(
+        students[0],
+        next.amountRwf,
+        await deps.canSeeBalance(session.waPhone, students[0].id),
+      ),
       buttons: copy.buttons.offer,
       effect: 'none',
     };

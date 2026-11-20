@@ -19,6 +19,7 @@ interface CloudflareEnv {
   INTOUCH_ACCOUNT_NO?: string;
   INTOUCH_PARTNER_PASSWORD?: string;
   INTOUCH_CALLBACK_URL?: string;
+  INTOUCH_BASE_URL?: string;
   PIN_MAX_ATTEMPTS?: string;
   PIN_LOCK_MINUTES?: string;
   WHATSAPP_PHONE_NUMBER_ID?: string;

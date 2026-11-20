@@ -115,6 +115,14 @@ describe('WhatsApp top-up conversation', () => {
   it('offers the student a known number has paid for, and takes a bare amount as yes', async () => {
     const offered = await turn(session(), { type: 'greet' }, { knownStudents: async () => [jean] }, 'Hello');
     expect(offered.text).toContain('Would you like to send money to Jean Claude');
+    expect(offered.text).toContain('Last time you sent money');
+    expect(offered.text).not.toContain('balance');
+
+    const linked = await turn(session(), { type: 'greet' }, {
+      knownStudents: async () => [jean],
+      canSeeBalance: async () => true,
+    }, 'Hello');
+    expect(linked.text).toContain('linked to Jean Claude');
     expect(offered.session.state).toBe(WaState.AWAITING_STUDENT_CONFIRMATION);
 
     const amount = await turn(offered.session, { type: 'yes' }, {}, '3000');

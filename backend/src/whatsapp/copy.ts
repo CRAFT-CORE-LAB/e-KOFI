@@ -38,15 +38,21 @@ export function describeMissing() {
   return 'I could not find that student. Check the spelling of the first and last name and include the school name, or send the student ID from the school card.';
 }
 
-export function offerStudent(student: PublicStudent, amountRwf: number | null) {
+/** `linked`: the school linked this number. Otherwise it is a number that paid for the student before. */
+export function offerStudent(student: PublicStudent, amountRwf: number | null, linked: boolean) {
   const first = student.fullName.split(' ')[0] || student.fullName;
   const what = amountRwf ? `${rwf(amountRwf)} to ${student.fullName}` : `money to ${student.fullName}`;
+  const who = `${student.fullName} (${student.className}, ${student.schoolName})`;
   return [
-    `Hello! This WhatsApp number is linked to ${student.fullName} (${student.className}, ${student.schoolName}) on e-KOFI.`,
+    linked
+      ? `Hello! This WhatsApp number is linked to ${who} on e-KOFI.`
+      : `Hello! Last time you sent money to ${who} on e-KOFI.`,
     '',
     `Would you like to send ${what}'s wallet?`,
     '',
-    `To pay for someone else, send their student ID, or their full name and school. Ask "balance" to see ${first}'s balance.`,
+    linked
+      ? `To pay for someone else, send their student ID, or their full name and school. Ask "balance" to see ${first}'s balance.`
+      : 'To pay for someone else, send their student ID, or their full name and school.',
   ].join('\n');
 }
 
