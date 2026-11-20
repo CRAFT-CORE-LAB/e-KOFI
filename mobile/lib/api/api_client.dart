@@ -62,7 +62,9 @@ class ApiClient {
         url.contains('127.0.0.1') ||
         url.contains('localhost') ||
         url.contains('192.168.') ||
-        url.contains(':3001');
+        url.contains(':3001') ||
+        url.contains('api.e-kofi.com') ||
+        url.contains('.up.railway.app');
   }
 
   Future<void> load() async {

@@ -112,7 +112,9 @@ export class ParentsService {
   private activityLabel(type: FinancialEventType, description?: string | null) {
     switch (type) {
       case FinancialEventType.PARENT_TOPUP:
-        return description?.startsWith('Student paid') ? 'Your child added money' : 'You added money';
+        if (description?.startsWith('Student paid')) return 'Your child added money';
+        if (description?.startsWith('WhatsApp')) return 'You added money on WhatsApp';
+        return 'You added money';
       case FinancialEventType.TEST_CREDIT:
         return 'Money added at school';
       case FinancialEventType.PURCHASE:

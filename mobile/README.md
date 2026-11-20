@@ -12,7 +12,7 @@ flutter pub get
 flutter run
 ```
 
-Default API URL: `https://api-production-240da.up.railway.app/api`
+Default API URL: `https://ekofi-api.ekofi.workers.dev/api`
 
 Override it from Login → Server or More → API server.
 

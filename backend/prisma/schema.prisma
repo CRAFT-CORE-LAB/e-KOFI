@@ -119,6 +119,9 @@ model Student {
   fingerprints   FingerprintTemplate[]
   events         FinancialEvent[]
   paymentIntents PaymentIntent[]
+  guardians      StudentGuardian[]
+  guardianCodes  GuardianLinkCode[]
+  whatsappChats  WhatsAppConversation[]
 
   @@index([lastName, firstName])
   @@index([schoolId, classId])
@@ -175,6 +178,7 @@ model PaymentIntent {
   studentCreditRwf  Int
   phone             String
   payer             String              @default("parent")
+  channel           String              @default("PARENT_PORTAL")
   idempotencyKey    String              @unique
   intouchRef        String?
   responseCode      String?
@@ -183,6 +187,7 @@ model PaymentIntent {
   updatedAt         DateTime            @updatedAt
 
   @@index([studentId, status])
+  @@index([channel, createdAt])
 }
 
 model FingerprintTemplate {
@@ -274,4 +279,70 @@ model IdempotencyRecord {
   statusCode Int
   body      Json
   createdAt DateTime @default(now())
+}
+
+model StudentGuardian {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  phone     String
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, phone])
+  @@index([phone])
+}
+
+model GuardianLinkCode {
+  id         String    @id @default(uuid())
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([studentId, consumedAt])
+}
+
+model WhatsAppConversation {
+  id               String    @id @default(uuid())
+  waPhone          String    @unique
+  state            String    @default("INITIAL")
+  revision         Int       @default(0)
+  studentId        String?
+  student          Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  schoolId         String?
+  studentCode      String?
+  studentName      String?
+  className        String?
+  schoolName       String?
+  pendingStudentId String?
+  amountRwf        Int?
+  payPhone         String?
+  paymentAttempt   Int       @default(0)
+  paymentRequestId String?   @unique
+  notifiedStatus   String?
+  linkFailures     Int       @default(0)
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  messages         WhatsAppMessage[]
+
+  @@index([studentId])
+  @@index([state])
+}
+
+model WhatsAppMessage {
+  id             String               @id @default(uuid())
+  conversationId String
+  conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      String
+  waMessageId    String?              @unique
+  body           String
+  kind           String
+  status         String?
+  createdAt      DateTime             @default(now())
+
+  @@index([conversationId, createdAt])
 }

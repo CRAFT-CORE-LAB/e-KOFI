@@ -151,6 +151,13 @@ export class StudentsService {
       await deleteStudentGraph(id);
     } else {
       await this.prisma.$transaction(async (tx) => {
+        await tx.whatsAppConversation.updateMany({ where: { studentId: id }, data: { studentId: null } });
+        await tx.whatsAppConversation.updateMany({
+          where: { pendingStudentId: id },
+          data: { pendingStudentId: null },
+        });
+        await tx.studentGuardian.deleteMany({ where: { studentId: id } });
+        await tx.guardianLinkCode.deleteMany({ where: { studentId: id } });
         await tx.fingerprintTemplate.deleteMany({ where: { studentId: id } });
         await tx.nfcCard.deleteMany({ where: { studentId: id } });
         if (existing.wallet) {

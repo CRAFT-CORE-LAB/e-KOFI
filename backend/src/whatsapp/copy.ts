@@ -1,0 +1,168 @@
+import { splitGross } from '../payments/fee';
+import { TOPUP_MAX_RWF, TOPUP_MIN_RWF } from './amount';
+import type { PublicStudent } from './states';
+
+export function rwf(amount: number) {
+  return `${amount.toLocaleString('en-US')} RWF`;
+}
+
+export const buttons = {
+  student: [
+    { id: 'confirm_student', title: 'Yes, confirm' },
+    { id: 'reject_student', title: 'No, try again' },
+  ],
+  payment: [
+    { id: 'confirm_payment', title: 'Confirm payment' },
+    { id: 'cancel_payment', title: 'Cancel payment' },
+  ],
+};
+
+export function welcome() {
+  return 'Hello! Welcome to e-KOFI. I can help you top up your child\'s school wallet. Please provide the student\'s ID.';
+}
+
+export function askStudentId() {
+  return 'Please send the student ID, for example the code printed on the school card.';
+}
+
+export function studentMissing() {
+  return 'We could not find a student with that ID. Check the number and try again.';
+}
+
+export function studentUnauthorized() {
+  return 'This WhatsApp number is not allowed to view that student. Enter the 6-digit link code from your school, or ask the school to register this phone. No student details have been shared.';
+}
+
+export function studentInactive() {
+  return 'This student wallet is not active. Please contact the school.';
+}
+
+export function walletMissing() {
+  return 'This student does not have a wallet yet. Please contact the school.';
+}
+
+export function confirmStudent(student: PublicStudent) {
+  return [
+    'I found the following student:',
+    '',
+    `Student Name: ${student.fullName}`,
+    `Class: ${student.className}`,
+    `School: ${student.schoolName}`,
+    `Student ID: ${student.studentCode}`,
+    '',
+    'Is this your child?',
+  ].join('\n');
+}
+
+export function chooseChild(students: PublicStudent[]) {
+  const lines = students.map(
+    (student) => `${student.fullName} · ${student.className} · ${student.studentCode}`,
+  );
+  return `I can help with these students linked to your WhatsApp number:\n\n${lines.join('\n')}\n\nReply with the student ID you want to top up.`;
+}
+
+export function askAmount(name: string) {
+  return `How much would you like to deposit into ${name}'s wallet? Enter an amount between ${rwf(TOPUP_MIN_RWF)} and ${rwf(TOPUP_MAX_RWF)}.`;
+}
+
+export function invalidAmount() {
+  return `Enter an amount between ${rwf(TOPUP_MIN_RWF)} and ${rwf(TOPUP_MAX_RWF)}.`;
+}
+
+export function askPayPhone() {
+  return 'What MTN or Airtel Rwanda number should receive the payment prompt? Use the number that will approve the mobile money request.';
+}
+
+export function invalidPayPhone() {
+  return 'Enter a valid MTN or Airtel Rwanda number, for example 0781234567.';
+}
+
+export function reviewPayment(input: {
+  name: string;
+  studentCode: string;
+  amountRwf: number;
+  phone: string;
+}) {
+  const split = splitGross(input.amountRwf);
+  return [
+    'Please review your wallet top-up:',
+    '',
+    `Student: ${input.name}`,
+    `Student ID: ${input.studentCode}`,
+    `You pay: ${rwf(input.amountRwf)}`,
+    `Student receives: ${rwf(split.studentCreditRwf)}`,
+    `Service fee: ${rwf(split.feeRwf)}`,
+    `Mobile money: ${input.phone}`,
+    '',
+    'Would you like to proceed?',
+  ].join('\n');
+}
+
+export function paymentPrompt(amountRwf: number) {
+  return `Your payment request for ${rwf(amountRwf)} has been initiated. Please complete the payment authorization on your phone. We will message you when it is confirmed.`;
+}
+
+export function paymentSuccess(input: {
+  grossRwf: number;
+  studentCreditRwf: number;
+  feeRwf: number;
+  name: string;
+  studentCode: string;
+}) {
+  return [
+    'Payment Successful!',
+    '',
+    `Your payment of ${rwf(input.grossRwf)} has been received.`,
+    '',
+    `Student: ${input.name}`,
+    `Student ID: ${input.studentCode}`,
+    '',
+    `${rwf(input.studentCreditRwf)} has been credited to the student's e-KOFI wallet. Service fee: ${rwf(input.feeRwf)}.`,
+    '',
+    'Thank you for using e-KOFI!',
+  ].join('\n');
+}
+
+export function paymentFailed(amountRwf: number) {
+  return [
+    'Payment Unsuccessful.',
+    '',
+    `Unfortunately, your payment of ${rwf(amountRwf)} could not be completed.`,
+    '',
+    "Your student's wallet has not been credited.",
+    '',
+    'Please try again or contact your school administrator if you need assistance.',
+  ].join('\n');
+}
+
+export function paymentPending() {
+  return 'Your payment is still being processed. We will notify you once the payment status is confirmed.';
+}
+
+export function cancelled() {
+  return 'The top-up has been cancelled. No payment was started. Send a message when you want to begin again.';
+}
+
+export function expired() {
+  return 'This conversation has expired, so the previous top-up was not started. Please provide the student ID to begin again.';
+}
+
+export function linkFailed() {
+  return 'That link code is not valid. Ask your school for a new code, or check the code and try again.';
+}
+
+export function linkLocked() {
+  return 'Too many incorrect link codes. Please wait and ask your school for a new code.';
+}
+
+export function balanceText(name: string, studentCode: string, balanceRwf: number) {
+  return `${name} (${studentCode}) has ${rwf(balanceRwf)} available on the e-KOFI wallet.`;
+}
+
+export function unrelated() {
+  return 'I can help you top up a student wallet. Send the student ID, or say you want to top up.';
+}
+
+export function stillPending() {
+  return 'A payment is still waiting for approval on the phone. Reply STATUS to check it. A new top-up cannot start until this one finishes.';
+}

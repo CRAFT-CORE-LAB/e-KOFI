@@ -17,6 +17,7 @@ import { PurchasesModule } from './purchases/purchases.module';
 import { SchoolsModule } from './schools/schools.module';
 import { StudentsModule } from './students/students.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { WalletsModule } from './wallets/wallets.module';
     StudentPortalModule,
     LedgerModule,
     DashboardModule,
+    WhatsAppModule,
   ],
   controllers: [HealthController],
   providers: [

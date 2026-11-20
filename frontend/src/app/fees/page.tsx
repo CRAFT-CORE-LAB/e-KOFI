@@ -11,7 +11,24 @@ type FeeRow = {
   grossRwf: number;
   studentCode: string;
   studentName: string;
+  channel?: string;
+  requestId?: string;
   when: string;
+};
+
+type TopUpRow = {
+  id: string;
+  requestId: string;
+  status: string;
+  channel: string;
+  grossRwf: number;
+  studentCreditRwf: number;
+  studentName: string;
+  studentCode: string;
+  schoolName: string;
+  phone: string;
+  statusDesc: string | null;
+  createdAt: string;
 };
 
 type WithdrawalRow = {
@@ -29,13 +46,27 @@ type PlatformWallet = {
 
 export default function FeesPage() {
   const [wallet, setWallet] = useState<PlatformWallet | null>(null);
+  const [topUps, setTopUps] = useState<TopUpRow[]>([]);
+  const [topUpError, setTopUpError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
+  function channelLabel(channel: string | undefined) {
+    if (channel === 'WHATSAPP') return 'WhatsApp';
+    if (channel === 'ADMIN_MANUAL') return 'Admin';
+    return 'Parent portal';
+  }
+
   async function load() {
     const data = await api<PlatformWallet>('/platform/wallet');
     setWallet(data);
+    try {
+      setTopUps(await api<TopUpRow[]>('/payments/intents'));
+      setTopUpError(null);
+    } catch (err) {
+      setTopUpError(err instanceof Error ? err.message : 'Could not load top-ups');
+    }
   }
 
   useEffect(() => {
@@ -102,7 +133,10 @@ export default function FeesPage() {
               <li key={row.id} className="flex justify-between gap-3 py-2">
                 <span>
                   {row.studentName}
-                  <span className="block text-stone-500">{row.studentCode}</span>
+                  <span className="block text-stone-500">
+                    {row.studentCode} · {channelLabel(row.channel)}
+                    {row.requestId ? ` · ${row.requestId}` : ''}
+                  </span>
                 </span>
                 <span>{money(row.feeRwf)}</span>
               </li>
@@ -125,6 +159,29 @@ export default function FeesPage() {
           </ul>
         </Card>
       </div>
+      <Card className="mt-6">
+        <h3 className="mb-3 font-medium">Wallet top-ups</h3>
+        <p className="mb-3 text-sm text-stone-600">
+          Portal and WhatsApp deposits use the same wallet. Pending and failed payments are listed here before they reach the ledger.
+        </p>
+        {topUpError ? <p className="mb-3 text-sm text-red-700">{topUpError}</p> : null}
+        <ul className="divide-y text-sm">
+          {topUps.map((row) => (
+            <li key={row.id} className="flex justify-between gap-3 py-2">
+              <span>
+                {row.studentName}
+                <span className="block text-stone-500">
+                  {channelLabel(row.channel)} · {row.studentCode} · {row.schoolName} · {row.phone} · {row.requestId} ·{' '}
+                  {row.status}
+                  {row.statusDesc ? ` · ${row.statusDesc}` : ''}
+                </span>
+              </span>
+              <span>{money(row.grossRwf)}</span>
+            </li>
+          ))}
+          {topUps.length === 0 ? <li className="py-2 text-stone-500">No top-ups yet.</li> : null}
+        </ul>
+      </Card>
     </Shell>
   );
 }

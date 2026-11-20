@@ -22,7 +22,14 @@
   },
   "vars": {
     "NODE_ENV": "production",
-    "PUBLIC_API_URL": "https://ekofi-api.ekofi.workers.dev/api"
+    "PUBLIC_API_URL": "https://ekofi-api.ekofi.workers.dev/api",
+    "WHATSAPP_PHONE_NUMBER_ID": "1403371432867383",
+    "WHATSAPP_BUSINESS_ACCOUNT_ID": "1198385265847648",
+    "WHATSAPP_GRAPH_VERSION": "v21.0",
+    "WHATSAPP_TEMPLATE_SUCCESS": "ekofi_payment_success",
+    "WHATSAPP_TEMPLATE_FAILED": "ekofi_payment_failed",
+    "WHATSAPP_TEMPLATE_LANG": "en",
+    "WHATSAPP_SESSION_MINUTES": "30"
   },
   "d1_databases": [
     {

@@ -21,6 +21,18 @@ interface CloudflareEnv {
   INTOUCH_CALLBACK_URL?: string;
   PIN_MAX_ATTEMPTS?: string;
   PIN_LOCK_MINUTES?: string;
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_BUSINESS_ACCOUNT_ID?: string;
+  WHATSAPP_ACCESS_TOKEN?: string;
+  WHATSAPP_VERIFY_TOKEN?: string;
+  WHATSAPP_APP_SECRET?: string;
+  WHATSAPP_GRAPH_VERSION?: string;
+  WHATSAPP_TEMPLATE_SUCCESS?: string;
+  WHATSAPP_TEMPLATE_FAILED?: string;
+  WHATSAPP_TEMPLATE_LANG?: string;
+  WHATSAPP_SESSION_MINUTES?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
 }
 
 interface D1Binding {

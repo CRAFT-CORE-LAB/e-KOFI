@@ -66,6 +66,10 @@ export function clearGuard(): Sql {
 
 export async function deleteStudentGraph(studentId: string): Promise<void> {
   await runBatch([
+    [`UPDATE "WhatsAppConversation" SET "studentId" = NULL WHERE "studentId" = ?`, studentId],
+    [`UPDATE "WhatsAppConversation" SET "pendingStudentId" = NULL WHERE "pendingStudentId" = ?`, studentId],
+    [`DELETE FROM "StudentGuardian" WHERE "studentId" = ?`, studentId],
+    [`DELETE FROM "GuardianLinkCode" WHERE "studentId" = ?`, studentId],
     [`UPDATE "NfcCard" SET "replacedById" = NULL WHERE "studentId" = ?`, studentId],
     [`DELETE FROM "FingerprintTemplate" WHERE "studentId" = ?`, studentId],
     [`DELETE FROM "NfcCard" WHERE "studentId" = ?`, studentId],

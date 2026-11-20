@@ -5,11 +5,29 @@ import { PaymentIntentStatus } from '../domain/enums';
 import { FinanceService } from '../finance/finance.service';
 import { IntouchService, IntouchStatus } from '../intouch/intouch.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TOPUP_MAX_RWF, TOPUP_MIN_RWF } from '../whatsapp/amount';
 import { splitGross } from './fee';
+
+export type PaymentChannel = 'PARENT_PORTAL' | 'WHATSAPP' | 'ADMIN_MANUAL';
+
+export type PaymentSettlement = {
+  requestId: string;
+  status: string;
+  studentId: string;
+  grossRwf: number;
+  feeRwf: number;
+  studentCreditRwf: number;
+  channel: string;
+};
 
 @Injectable()
 export class PaymentsService {
   private cachedActorId?: string;
+  private settlementHandler?: (event: PaymentSettlement) => Promise<void>;
+
+  setSettlementHandler(handler: (event: PaymentSettlement) => Promise<void>) {
+    this.settlementHandler = handler;
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -24,8 +42,9 @@ export class PaymentsService {
     mobilePhone: string,
     idempotencyKey: string,
     payer: 'parent' | 'student' = 'parent',
+    channel: PaymentChannel = 'PARENT_PORTAL',
   ) {
-    if (!Number.isInteger(grossRwf) || grossRwf < 500 || grossRwf > 500000) {
+    if (!Number.isInteger(grossRwf) || grossRwf < TOPUP_MIN_RWF || grossRwf > TOPUP_MAX_RWF) {
       throw new BadRequestException('Enter an amount between 500 and 500,000 RWF.');
     }
     const { feeRwf, studentCreditRwf } = splitGross(grossRwf);
@@ -55,6 +74,7 @@ export class PaymentsService {
         studentCreditRwf,
         phone,
         payer,
+        channel,
       },
     });
 
@@ -174,6 +194,7 @@ export class PaymentsService {
         });
       }
     }
+    await this.settle(intent.id);
     return { message: 'success', success: true, request_id: requestId };
   }
 
@@ -199,6 +220,8 @@ export class PaymentsService {
         grossRwf: row.grossRwf,
         studentCode: row.student.studentCode,
         studentName: `${row.student.firstName} ${row.student.lastName}`.trim(),
+        channel: row.channel,
+        requestId: row.requestId,
         when: row.updatedAt.toISOString(),
       })),
       withdrawals: withdrawals.map((row) => ({
@@ -209,6 +232,25 @@ export class PaymentsService {
         when: row.createdAt.toISOString(),
       })),
     };
+  }
+
+  async listIntents(studentId?: string) {
+    const rows = await this.prisma.paymentIntent.findMany({
+      where: studentId ? { studentId } : {},
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      include: {
+        student: {
+          select: {
+            studentCode: true,
+            firstName: true,
+            lastName: true,
+            school: { select: { name: true } },
+          },
+        },
+      },
+    });
+    return rows.map((row) => this.intentSummary(row));
   }
 
   async withdrawPlatform(amountRwf: number, mobilePhone: string, actorId: string, idempotencyKey: string) {
@@ -271,6 +313,13 @@ export class PaymentsService {
     if (current.status === PaymentIntentStatus.FAILED) return this.view(current);
     await this.ensureFeeAccount();
     const actorId = await this.systemActorId();
+    const paidBy =
+      current.channel === 'WHATSAPP'
+        ? 'WhatsApp parent'
+        : current.payer === 'student'
+          ? 'Student'
+          : 'Parent';
+    const reference = current.channel === 'WHATSAPP' ? ` · ref ${current.requestId}` : '';
     const settled = await this.finance.parentTopUp({
       studentId: current.studentId,
       grossRwf: current.grossRwf,
@@ -278,7 +327,7 @@ export class PaymentsService {
       studentCreditRwf: current.studentCreditRwf,
       idempotencyKey: current.idempotencyKey,
       actorId,
-      description: `${current.payer === 'student' ? 'Student' : 'Parent'} paid ${current.grossRwf} RWF · ${current.studentCreditRwf} to student · ${current.feeRwf} service fee`,
+      description: `${paidBy} paid ${current.grossRwf} RWF · ${current.studentCreditRwf} to student · ${current.feeRwf} service fee${reference}`,
     });
     const updated = await this.prisma.paymentIntent.update({
       where: { id: current.id },
@@ -314,6 +363,51 @@ export class PaymentsService {
             ? intent.statusDesc || 'The payment was not approved.'
             : intent.statusDesc || 'Approve the payment on your phone.',
     };
+  }
+
+  private intentSummary(row: PaymentIntent & {
+    student: { studentCode: string; firstName: string; lastName: string; school: { name: string } };
+  }) {
+    return {
+      id: row.id,
+      requestId: row.requestId,
+      status: row.status,
+      channel: row.channel,
+      grossRwf: row.grossRwf,
+      feeRwf: row.feeRwf,
+      studentCreditRwf: row.studentCreditRwf,
+      phone: row.phone,
+      payer: row.payer,
+      intouchRef: row.intouchRef,
+      responseCode: row.responseCode,
+      statusDesc: row.statusDesc,
+      studentCode: row.student.studentCode,
+      studentName: `${row.student.firstName} ${row.student.lastName}`.trim(),
+      schoolName: row.student.school.name,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private async settle(intentId: string) {
+    if (!this.settlementHandler) return;
+    const intent = await this.prisma.paymentIntent.findUnique({ where: { id: intentId } });
+    if (!intent || (intent.status !== PaymentIntentStatus.POSTED && intent.status !== PaymentIntentStatus.FAILED)) {
+      return;
+    }
+    try {
+      await this.settlementHandler({
+        requestId: intent.requestId,
+        status: intent.status,
+        studentId: intent.studentId,
+        grossRwf: intent.grossRwf,
+        feeRwf: intent.feeRwf,
+        studentCreditRwf: intent.studentCreditRwf,
+        channel: intent.channel,
+      });
+    } catch {
+      return;
+    }
   }
 
   private async ensureFeeAccount() {

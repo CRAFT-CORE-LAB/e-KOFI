@@ -17,6 +17,18 @@ const ENV_KEYS = [
   'INTOUCH_CALLBACK_URL',
   'PIN_MAX_ATTEMPTS',
   'PIN_LOCK_MINUTES',
+  'WHATSAPP_PHONE_NUMBER_ID',
+  'WHATSAPP_BUSINESS_ACCOUNT_ID',
+  'WHATSAPP_ACCESS_TOKEN',
+  'WHATSAPP_VERIFY_TOKEN',
+  'WHATSAPP_APP_SECRET',
+  'WHATSAPP_GRAPH_VERSION',
+  'WHATSAPP_TEMPLATE_SUCCESS',
+  'WHATSAPP_TEMPLATE_FAILED',
+  'WHATSAPP_TEMPLATE_LANG',
+  'WHATSAPP_SESSION_MINUTES',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
 ] as const;
 
 function applyEnv(env: CloudflareEnv): void {
@@ -36,7 +48,7 @@ export async function boot(env: CloudflareEnv): Promise<void> {
   if (!starting) {
     starting = (async () => {
       const server = express();
-      const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
+      const app = await NestFactory.create(AppModule, new ExpressAdapter(server), { rawBody: true });
       app.setGlobalPrefix('api');
       app.enableCors({ origin: true, credentials: true });
       app.useGlobalPipes(
