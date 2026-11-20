@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentIntent } from '@prisma/client';
 import { PaymentIntentStatus } from '../domain/enums';
@@ -22,6 +22,7 @@ export type PaymentSettlement = {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
   private cachedActorId?: string;
   private settlementHandler?: (event: PaymentSettlement) => Promise<void>;
 
@@ -169,8 +170,14 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Intouch calls this when a payment finishes, but the endpoint is public and request
+   * IDs can be guessed (WhatsApp uses wa:<phone>:<attempt>), so the body is only a hint
+   * about which payment to look at. Whether it succeeded or failed is asked of Intouch
+   * itself, the same check the parent portal's refresh uses. A forged "Successfull"
+   * callback therefore credits nothing, and a forged "Failed" cannot cancel a real payment.
+   */
   async handleCallback(body: Record<string, unknown>) {
-    const status = this.intouch.readStatus(body);
     const payload = (body.jsonpayLoad ?? body.jsonpayload ?? body) as Record<string, unknown>;
     const requestId = String(payload.requesttransactionid ?? body.requesttransactionid ?? '');
     if (!requestId) {
@@ -181,8 +188,9 @@ export class PaymentsService {
       return { message: 'success', success: true, request_id: requestId };
     }
     if (intent.status === PaymentIntentStatus.PENDING) {
-      if (status.success) await this.applySuccess(intent, status);
-      else if (status.failed) {
+      const status = await this.confirmedStatus(intent.requestId, intent.intouchRef);
+      if (status?.success) await this.applySuccess(intent, status);
+      else if (status?.failed) {
         await this.prisma.paymentIntent.updateMany({
           where: { id: intent.id, status: PaymentIntentStatus.PENDING },
           data: {
@@ -196,6 +204,19 @@ export class PaymentsService {
     }
     await this.settle(intent.id);
     return { message: 'success', success: true, request_id: requestId };
+  }
+
+  /** Intouch's own answer for a payment, or null when it cannot be asked (it then stays pending). */
+  private async confirmedStatus(requestId: string, intouchRef: string | null) {
+    if (!this.intouch.configured()) return null;
+    try {
+      return await this.intouch.getTransactionStatus(requestId, intouchRef);
+    } catch (error) {
+      this.logger.warn(
+        `Intouch status check failed for ${requestId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+      return null;
+    }
   }
 
   async platformWallet() {

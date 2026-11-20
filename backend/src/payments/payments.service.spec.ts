@@ -36,6 +36,8 @@ function harness() {
   const intents = new Map<string, IntentRow>();
   const parentTopUp = jest.fn(async () => ({ wallet: { balanceRwf: 19700 } }));
   const readStatus = jest.fn();
+  const getTransactionStatus = jest.fn();
+  const configured = jest.fn(() => true);
   const prisma = {
     paymentIntent: {
       findUnique: jest.fn(async ({ where }: { where: { id?: string; requestId?: string } }) => {
@@ -78,10 +80,10 @@ function harness() {
   const service = new PaymentsService(
     prisma as unknown as PrismaService,
     { parentTopUp } as unknown as FinanceService,
-    { readStatus } as unknown as IntouchService,
+    { readStatus, getTransactionStatus, configured } as unknown as IntouchService,
     { get: () => undefined } as unknown as ConfigService,
   );
-  return { service, intents, parentTopUp, readStatus };
+  return { service, intents, parentTopUp, readStatus, getTransactionStatus, configured };
 }
 
 function pendingIntent(): IntentRow {
@@ -115,9 +117,9 @@ const successStatus = {
 
 describe('Intouch callback wallet credit', () => {
   it('credits a successful payment once and ignores a duplicate callback', async () => {
-    const { service, intents, parentTopUp, readStatus } = harness();
-    intents.set('intent-1', pendingIntent());
-    readStatus.mockReturnValue(successStatus);
+    const { service, intents, parentTopUp, getTransactionStatus } = harness();
+    intents.set('intent-1', { ...pendingIntent(), intouchRef: 'tx-1' });
+    getTransactionStatus.mockResolvedValue(successStatus);
     const body = { requesttransactionid: 'wa:250788123456:1', responsecode: '01' };
 
     await service.handleCallback(body);
@@ -133,12 +135,13 @@ describe('Intouch callback wallet credit', () => {
       }),
     );
     expect(intents.get('intent-1')?.status).toBe(PaymentIntentStatus.POSTED);
+    expect(getTransactionStatus).toHaveBeenCalledWith('wa:250788123456:1', 'tx-1');
   });
 
   it('does not credit the wallet when Intouch reports a failure', async () => {
-    const { service, intents, parentTopUp, readStatus } = harness();
+    const { service, intents, parentTopUp, getTransactionStatus } = harness();
     intents.set('intent-1', pendingIntent());
-    readStatus.mockReturnValue({
+    getTransactionStatus.mockResolvedValue({
       ...successStatus,
       success: false,
       failed: true,
@@ -151,5 +154,45 @@ describe('Intouch callback wallet credit', () => {
 
     expect(parentTopUp).not.toHaveBeenCalled();
     expect(intents.get('intent-1')?.status).toBe(PaymentIntentStatus.FAILED);
+  });
+
+  it('does not credit the wallet from a forged success callback', async () => {
+    const { service, intents, parentTopUp, getTransactionStatus } = harness();
+    intents.set('intent-1', pendingIntent());
+    getTransactionStatus.mockResolvedValue({ ...successStatus, success: false, pending: true, responseCode: '1000', status: 'Pending' });
+
+    await service.handleCallback({
+      requesttransactionid: 'wa:250788123456:1',
+      status: 'Successfull',
+      responsecode: '01',
+      transactionid: 'someone-elses-tx',
+    });
+
+    expect(parentTopUp).not.toHaveBeenCalled();
+    expect(intents.get('intent-1')?.status).toBe(PaymentIntentStatus.PENDING);
+    expect(getTransactionStatus).toHaveBeenCalledWith('wa:250788123456:1', null);
+  });
+
+  it('does not cancel a payment from a forged failure callback', async () => {
+    const { service, intents, getTransactionStatus } = harness();
+    intents.set('intent-1', pendingIntent());
+    getTransactionStatus.mockResolvedValue({ ...successStatus, success: false, pending: true, responseCode: '1000', status: 'Pending' });
+
+    await service.handleCallback({ requesttransactionid: 'wa:250788123456:1', status: 'Failed', responsecode: '1002' });
+
+    expect(intents.get('intent-1')?.status).toBe(PaymentIntentStatus.PENDING);
+  });
+
+  it('leaves the payment pending when Intouch cannot be asked', async () => {
+    const { service, intents, parentTopUp, getTransactionStatus, configured } = harness();
+    intents.set('intent-1', pendingIntent());
+    getTransactionStatus.mockRejectedValue(new Error('Could not reach Intouch Pay.'));
+
+    await service.handleCallback({ requesttransactionid: 'wa:250788123456:1', status: 'Successfull', responsecode: '01' });
+    configured.mockReturnValue(false);
+    await service.handleCallback({ requesttransactionid: 'wa:250788123456:1', status: 'Successfull', responsecode: '01' });
+
+    expect(parentTopUp).not.toHaveBeenCalled();
+    expect(intents.get('intent-1')?.status).toBe(PaymentIntentStatus.PENDING);
   });
 });
