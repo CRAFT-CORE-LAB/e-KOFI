@@ -29,3 +29,4 @@ mobile/build/
 pc-scanner/sdk/
 __pycache__/
 *.pyc
+.dev.vars
