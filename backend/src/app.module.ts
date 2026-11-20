@@ -18,12 +18,14 @@ import { SchoolsModule } from './schools/schools.module';
 import { StudentsModule } from './students/students.module';
 import { WalletsModule } from './wallets/wallets.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { WorkerThrottlerStorage } from './throttler/worker-throttler.storage';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60000, limit: 120 }],
+      storage: new WorkerThrottlerStorage(),
     }),
     PrismaModule,
     AuthModule,
