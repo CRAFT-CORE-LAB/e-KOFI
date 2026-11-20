@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { GuardiansService } from '../guardians/guardians.service';
@@ -36,10 +36,27 @@ type ConversationRow = {
   expiresAt: Date;
 };
 
+/** Messages from PaymentsService that are written for parents and safe to show as they are. */
+const PARENT_MESSAGES = ['Enter an amount', 'That amount is too small', 'Mobile money top-up is not available'];
+
+function errorMessage(error: unknown): string | null {
+  if (error instanceof BadRequestException) {
+    const response = error.getResponse();
+    if (typeof response === 'string') return response;
+    if (response && typeof response === 'object' && 'message' in response) {
+      const message = (response as { message: string | string[] }).message;
+      return Array.isArray(message) ? message.join(' ') : message;
+    }
+  }
+  return error instanceof Error ? error.message : null;
+}
+
 const OUR_BUTTONS = new Set(['confirm_student', 'reject_student', 'confirm_payment', 'cancel_payment']);
 
 @Injectable()
 export class WhatsAppService {
+  private readonly logger = new Logger(WhatsAppService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -344,15 +361,15 @@ export class WhatsAppService {
     return (Object.values(WaState) as string[]).includes(value) ? (value as WaState) : WaState.INITIAL;
   }
 
+  /**
+   * What the parent reads when a payment could not start. Only messages written for parents
+   * (amount limits, top-up switched off) are passed on; anything from Intouch or the server,
+   * such as "Intouch Pay returned 403", is logged and stored on the payment instead.
+   */
   private failureText(error: unknown, amountRwf: number) {
-    if (error instanceof BadRequestException) {
-      const response = error.getResponse();
-      if (typeof response === 'string') return response;
-      if (response && typeof response === 'object' && 'message' in response) {
-        const message = (response as { message: string | string[] }).message;
-        return Array.isArray(message) ? message.join(' ') : message;
-      }
-    }
-    return copy.paymentFailed(amountRwf);
+    const message = errorMessage(error);
+    if (message && PARENT_MESSAGES.some((start) => message.startsWith(start))) return message;
+    this.logger.warn(`WhatsApp top-up could not start: ${message ?? 'unknown error'}`);
+    return copy.paymentNotStarted(amountRwf);
   }
 }

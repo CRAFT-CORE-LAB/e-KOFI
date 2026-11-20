@@ -195,6 +195,14 @@ export function paymentFailed(amountRwf: number) {
   ].join('\n');
 }
 
+export function paymentNotStarted(amountRwf: number) {
+  return [
+    `We could not start the mobile money request for ${rwf(amountRwf)} right now. No money was taken and the wallet was not changed.`,
+    '',
+    'Please try again later. If it keeps happening, contact the school.',
+  ].join('\n');
+}
+
 export function paymentPending() {
   return 'Your payment is still being processed. We will notify you once the payment status is confirmed.';
 }

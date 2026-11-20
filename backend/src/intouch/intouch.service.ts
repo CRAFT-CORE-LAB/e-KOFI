@@ -172,9 +172,10 @@ export class IntouchService {
     }
     const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok && !data.responsecode && !data.status) {
-      throw new BadRequestException(
-        (typeof data.message === 'string' && data.message) || `Intouch Pay returned ${response.status}.`,
-      );
+      // The live API answers a refused login with 403 {"detail": "No such user"}; keep that reason.
+      const reason =
+        (typeof data.message === 'string' && data.message) || (typeof data.detail === 'string' && data.detail) || '';
+      throw new BadRequestException(`Intouch Pay returned ${response.status}${reason ? `: ${reason}` : ''}.`);
     }
     return data;
   }
