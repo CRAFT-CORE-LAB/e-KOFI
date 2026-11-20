@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ekofi-app",
+  // The e-kofi.com zone lives in this account, so the app deploys here; the API stays on ekofi-api.ekofi.workers.dev.
+  "account_id": "ff85691539cd946dc9cd644cbb7afe84",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-19",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
