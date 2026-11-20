@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 
 export type IntouchStatus = {
   pending: boolean;
@@ -14,12 +14,25 @@ export type IntouchStatus = {
   message: string | null;
 };
 
+/**
+ * Mobile Money collections. Since 2026-11-20 they go through Shaka's IntouchPay account
+ * (the owner's decision): with SHAKA_PAY_URL and SHAKA_BRIDGE_SECRET set, e-KOFI asks Shaka
+ * to start and to check each payment, Shaka calls Intouch with its own login, and Intouch's
+ * callback reaches Shaka, which tells e-KOFI to look again (/api/intouch/callback). Shaka's
+ * replies use Intouch's own fields, so readStatus reads both. e-KOFI's own Intouch login
+ * (INTOUCH_*) is used only when SHAKA_PAY_URL is not set.
+ */
 @Injectable()
 export class IntouchService {
   constructor(private readonly config: ConfigService) {}
 
   configured() {
-    return Boolean(this.username && this.accountNo && this.partnerPassword);
+    return Boolean(this.shakaPayUrl || (this.username && this.accountNo && this.partnerPassword));
+  }
+
+  /** True when collections go through Shaka's IntouchPay account. */
+  viaShaka() {
+    return Boolean(this.shakaPayUrl);
   }
 
   callbackUrl() {
@@ -33,13 +46,15 @@ export class IntouchService {
 
   async requestPayment(amountRwf: number, mobilePhone: string, requestId: string, reason: string) {
     const phone = this.normalizePhone(mobilePhone);
-    const data = await this.post('requestpayment', {
-      amount: amountRwf,
-      mobilephone: phone,
-      requesttransactionid: requestId,
-      callbackurl: this.callbackUrl(),
-      reason,
-    });
+    const data = this.viaShaka()
+      ? await this.shaka('pay', { requestId, amount: amountRwf, phone, reason })
+      : await this.post('requestpayment', {
+          amount: amountRwf,
+          mobilephone: phone,
+          requesttransactionid: requestId,
+          callbackurl: this.callbackUrl(),
+          reason,
+        });
     const status = this.readStatus(data);
     if (status.failed && !status.pending && !status.success) {
       throw new BadRequestException(status.message || 'Mobile money could not start the payment.');
@@ -48,6 +63,12 @@ export class IntouchService {
   }
 
   async sendPayout(amountRwf: number, mobilePhone: string, requestId: string, reason: string) {
+    if (this.viaShaka()) {
+      // The money sits in Shaka's IntouchPay account; e-KOFI cannot send it out from there.
+      throw new BadRequestException(
+        "Top-ups are collected in Shaka's IntouchPay account, so payouts are made by Shaka, not from e-KOFI.",
+      );
+    }
     const phone = this.normalizePhone(mobilePhone);
     const data = await this.post('requestdeposit', {
       amount: amountRwf,
@@ -71,6 +92,7 @@ export class IntouchService {
   }
 
   async getTransactionStatus(requestId: string, transactionId?: string | null): Promise<IntouchStatus> {
+    if (this.viaShaka()) return this.readStatus(await this.shaka('pay-status', { requestId }));
     const data = await this.post('gettransactionstatus', {
       requesttransactionid: requestId,
       ...(transactionId ? { transactionid: transactionId } : {}),
@@ -79,6 +101,7 @@ export class IntouchService {
   }
 
   async getBalance() {
+    if (this.viaShaka()) return null;
     const data = await this.post('getbalance', {});
     const raw = data.balance ?? data.accountbalance ?? data.amount;
     const balance = typeof raw === 'number' ? raw : Number(raw);
@@ -137,6 +160,36 @@ export class IntouchService {
       return { ...data, ...(wrapped as Record<string, unknown>) };
     }
     return data;
+  }
+
+  /** A signed call to Shaka's e-KOFI payment bridge (`<SHAKA_PAY_URL>/pay`, `/pay-status`). */
+  private async shaka(action: 'pay' | 'pay-status', payload: Record<string, unknown>) {
+    const secret = this.config.get<string>('SHAKA_BRIDGE_SECRET')?.trim() ?? '';
+    const body = JSON.stringify(payload);
+    let response: Response;
+    try {
+      response = await fetch(`${this.shakaPayUrl}/${action}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Ekofi-Signature': `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`,
+        },
+        body,
+      });
+    } catch {
+      throw new BadRequestException('Could not reach the Shaka payment service. Try again in a moment.');
+    }
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok && !data.responsecode && !data.status) {
+      const reason = typeof data.error === 'string' ? `: ${data.error}` : '';
+      throw new BadRequestException(`Shaka payment service returned ${response.status}${reason}.`);
+    }
+    return data;
+  }
+
+  private get shakaPayUrl() {
+    const url = this.config.get<string>('SHAKA_PAY_URL')?.trim().replace(/\/$/, '') ?? '';
+    return url && this.config.get<string>('SHAKA_BRIDGE_SECRET')?.trim() ? url : '';
   }
 
   private async post(action: string, extra: Record<string, unknown>) {

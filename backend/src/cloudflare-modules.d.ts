@@ -34,6 +34,7 @@ interface CloudflareEnv {
   WHATSAPP_SESSION_MINUTES?: string;
   SHAKA_BRIDGE_URL?: string;
   SHAKA_BRIDGE_SECRET?: string;
+  SHAKA_PAY_URL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
 }

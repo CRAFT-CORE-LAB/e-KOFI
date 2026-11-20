@@ -26,6 +26,17 @@ WhatsApp is an extra way to use the existing e-KOFI top-up. The parent portal, s
 
 Both sides use one shared secret: `SHAKA_BRIDGE_SECRET` on `ekofi-api`, `EKOFI_BRIDGE_SECRET` on Shaka's `mail` Worker.
 
+## Where the money goes
+
+Since 2026-11-20 every top-up (WhatsApp and the parent portal) is collected on **Shaka's IntouchPay account**, the owner's decision. e-KOFI's own Intouch login is no longer used. With `SHAKA_PAY_URL` set, e-KOFI asks Shaka:
+
+- `POST <SHAKA_PAY_URL>/pay` with `{ requestId, amount, phone, reason }` to start the prompt.
+- `POST <SHAKA_PAY_URL>/pay-status` with `{ requestId }` to check it. Shaka answers in Intouch's own fields.
+
+Both are signed with `SHAKA_BRIDGE_SECRET`. Shaka sends Intouch its own id (`EKOFI-…`) and keeps every e-KOFI payment in its `ekofi_payments` table, so they stand apart in Shaka's books. Intouch calls back to Shaka, and Shaka posts `{ requesttransactionid }` to e-KOFI's `/api/intouch/callback`. e-KOFI never trusts a callback body: it asks `/pay-status`, which asks Intouch, before crediting the wallet (once, by its idempotency key).
+
+Payouts (canteen withdrawals and the service-fee withdrawal) are refused while `SHAKA_PAY_URL` is set, because the money is in Shaka's account. Shaka settles with the schools.
+
 ## What you configure
 
 Add these on the API process. On Cloudflare, set them as Worker secrets or vars. They are copied into the app when the Worker boots. Do not commit real values.
