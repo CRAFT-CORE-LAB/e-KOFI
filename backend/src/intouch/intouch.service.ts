@@ -63,12 +63,7 @@ export class IntouchService {
   }
 
   async sendPayout(amountRwf: number, mobilePhone: string, requestId: string, reason: string) {
-    if (this.viaShaka()) {
-      // The money sits in Shaka's IntouchPay account; e-KOFI cannot send it out from there.
-      throw new BadRequestException(
-        "Top-ups are collected in Shaka's IntouchPay account, so payouts are made by Shaka, not from e-KOFI.",
-      );
-    }
+    if (this.viaShaka()) return this.payoutViaShaka(amountRwf, mobilePhone, requestId, reason);
     const phone = this.normalizePhone(mobilePhone);
     const data = await this.post('requestdeposit', {
       amount: amountRwf,
@@ -162,25 +157,81 @@ export class IntouchService {
     return data;
   }
 
-  /** A signed call to Shaka's e-KOFI payment bridge (`<SHAKA_PAY_URL>/pay`, `/pay-status`). */
-  private async shaka(action: 'pay' | 'pay-status', payload: Record<string, unknown>) {
+  /**
+   * A payout made by Shaka from its IntouchPay account (canteen or service-fee withdrawal).
+   * Shaka refuses anything above what e-KOFI collected there, and the withdrawal key keeps a
+   * retry from paying twice. The caller refunds the e-KOFI balance when this throws, so it
+   * only throws when no money can have left: a clear refusal, or Shaka saying it never
+   * started the payout. When the answer is unclear it returns the payout as pending instead.
+   */
+  private async payoutViaShaka(amountRwf: number, mobilePhone: string, requestId: string, reason: string) {
+    const phone = this.normalizePhone(mobilePhone);
+    const done = (data: Record<string, unknown>) => {
+      const status = this.readStatus(data);
+      if (!status.success && !status.pending) {
+        throw new BadRequestException(status.message || `Shaka could not send the money (${status.responseCode || 'error'}).`);
+      }
+      return {
+        referenceId: status.transactionId ?? requestId,
+        responseCode: status.responseCode,
+        phone,
+        pending: status.pending && !status.success,
+      };
+    };
+    const pendingResult = { referenceId: requestId, responseCode: '1000', phone, pending: true };
+
+    let sent: { status: number; data: Record<string, unknown> } | null = null;
+    try {
+      sent = await this.shakaCall('payout', { requestId, amount: amountRwf, phone, reason });
+    } catch {
+      sent = null;
+    }
+    if (sent && sent.status < 500) {
+      if (sent.status >= 400) {
+        const why = typeof sent.data.error === 'string' ? sent.data.error : `Shaka answered ${sent.status}`;
+        throw new BadRequestException(why);
+      }
+      return done(sent.data);
+    }
+    // No answer, or a server error: Shaka may have paid. Ask it before giving anything back.
+    try {
+      const known = await this.shakaCall('payout-status', { requestId });
+      if (known.status === 404) {
+        throw new BadRequestException('The Shaka payment service could not be reached. No money was sent.');
+      }
+      if (known.status < 400) return done(known.data);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+    }
+    return pendingResult;
+  }
+
+  /** A signed call to Shaka's e-KOFI payment bridge (`<SHAKA_PAY_URL>/<action>`). Throws only when Shaka is unreachable. */
+  private async shakaCall(action: 'pay' | 'pay-status' | 'payout' | 'payout-status', payload: Record<string, unknown>) {
     const secret = this.config.get<string>('SHAKA_BRIDGE_SECRET')?.trim() ?? '';
     const body = JSON.stringify(payload);
-    let response: Response;
+    const response = await fetch(`${this.shakaPayUrl}/${action}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ekofi-Signature': `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`,
+      },
+      body,
+    });
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    return { status: response.status, data };
+  }
+
+  /** A signed call to Shaka's pay bridge (`/pay`, `/pay-status`); an unclear reply throws. */
+  private async shaka(action: 'pay' | 'pay-status', payload: Record<string, unknown>) {
+    let response: { status: number; data: Record<string, unknown> };
     try {
-      response = await fetch(`${this.shakaPayUrl}/${action}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Ekofi-Signature': `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`,
-        },
-        body,
-      });
+      response = await this.shakaCall(action, payload);
     } catch {
       throw new BadRequestException('Could not reach the Shaka payment service. Try again in a moment.');
     }
-    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok && !data.responsecode && !data.status) {
+    const { data } = response;
+    if (response.status >= 400 && !data.responsecode && !data.status) {
       const reason = typeof data.error === 'string' ? `: ${data.error}` : '';
       throw new BadRequestException(`Shaka payment service returned ${response.status}${reason}.`);
     }

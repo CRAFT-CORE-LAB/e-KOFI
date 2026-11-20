@@ -35,7 +35,7 @@ Since 2026-11-20 every top-up (WhatsApp and the parent portal) is collected on *
 
 Both are signed with `SHAKA_BRIDGE_SECRET`. Shaka sends Intouch its own id (`EKOFI-…`) and keeps every e-KOFI payment in its `ekofi_payments` table, so they stand apart in Shaka's books. Intouch calls back to Shaka, and Shaka posts `{ requesttransactionid }` to e-KOFI's `/api/intouch/callback`. e-KOFI never trusts a callback body: it asks `/pay-status`, which asks Intouch, before crediting the wallet (once, by its idempotency key).
 
-Payouts (canteen withdrawals and the service-fee withdrawal) are refused while `SHAKA_PAY_URL` is set, because the money is in Shaka's account. Shaka settles with the schools.
+Payouts (canteen withdrawals and the service-fee withdrawal) are made by Shaka from the same account: e-KOFI calls `<SHAKA_PAY_URL>/payout` with `{ requestId, amount, phone, reason }` (and `/payout-status`). Shaka refuses any payout above what e-KOFI collected through it (97% of successful collections, after Intouch's commission) minus earlier payouts and a 500 RWF fee reserve each, so Shaka's own money is never paid out. The withdrawal key keeps a retry from paying twice. e-KOFI gives the balance back only when Shaka clearly refused or never started the payout; an unclear answer leaves the withdrawal recorded as pending.
 
 ## What you configure
 

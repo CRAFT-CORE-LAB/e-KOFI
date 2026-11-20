@@ -55,7 +55,37 @@ describe('IntouchService through Shaka', () => {
     await expect(service().getTransactionStatus('nope')).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('refuses payouts, which would come out of Shaka\'s account', async () => {
-    await expect(service().sendPayout(1000, '0788123456', 'w-1', 'fee')).rejects.toThrow('payouts are made by Shaka');
+  it('asks Shaka to pay out, signed, and reports a paid payout', async () => {
+    const urls: string[] = [];
+    global.fetch = jest.fn(async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ success: true, responsecode: '2001', status: 'Successfull', referenceid: 'ref-9' }));
+    }) as unknown as typeof fetch;
+    const paid = await service().sendPayout(1000, '0788123456', 'w-1', 'e-KOFI canteen withdrawal');
+    expect(paid).toEqual({ referenceId: 'ref-9', responseCode: '2001', phone: '250788123456', pending: false });
+    expect(urls).toEqual(['https://shaka.test/api/bridge/ekofi/payout']);
+  });
+
+  it('throws (so e-KOFI gives the balance back) when Shaka refuses over the cap', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(JSON.stringify({ ok: false, error: 'That is more than e-KOFI has at Shaka' }), { status: 409 }),
+    ) as unknown as typeof fetch;
+    await expect(service().sendPayout(1000, '0788123456', 'w-2', 'fee')).rejects.toThrow('more than e-KOFI has');
+  });
+
+  it('keeps an unclear payout pending instead of giving the balance back', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new TypeError('network down');
+    }) as unknown as typeof fetch;
+    const unclear = await service().sendPayout(1000, '0788123456', 'w-3', 'fee');
+    expect(unclear.pending).toBe(true);
+  });
+
+  it('gives the balance back only when Shaka says it never started the payout', async () => {
+    global.fetch = jest.fn(async (url: string) => {
+      if (url.endsWith('/payout')) return new Response('oops', { status: 502 });
+      return new Response(JSON.stringify({ ok: false, error: 'Unknown payout' }), { status: 404 });
+    }) as unknown as typeof fetch;
+    await expect(service().sendPayout(1000, '0788123456', 'w-4', 'fee')).rejects.toThrow('No money was sent');
   });
 });
