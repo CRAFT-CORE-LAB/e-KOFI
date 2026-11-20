@@ -99,6 +99,9 @@ function localIntent(state: string, text: string, buttonId?: string): Intent {
       code &&
       (state === WaState.REQUESTING_STUDENT_ID ||
         state === WaState.VERIFYING_PARENT ||
+        // "Send money to STU-000005": a code with a digit is a real ID even beside "send money";
+        // without a digit, "top-up" itself would read as a code.
+        /\d/.test(code) ||
         !START.test(trimmed.replace(code, ' ')))
     ) {
       return { type: 'student_id', studentCode: code };

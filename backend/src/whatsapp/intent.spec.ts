@@ -44,4 +44,12 @@ describe('WhatsApp intent resolution', () => {
       }).type,
     ).toBe('start');
   });
+
+  it('reads a student ID written next to "send money"', () => {
+    expect(resolveIntent({ state: WaState.INITIAL, text: 'Send money to STU-000005' })).toEqual({
+      type: 'student_id',
+      studentCode: 'STU-000005',
+    });
+    expect(resolveIntent({ state: WaState.INITIAL, text: 'I want a top-up' }).type).toBe('start');
+  });
 });

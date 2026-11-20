@@ -191,7 +191,9 @@ export function paymentFailed(amountRwf: number) {
     '',
     "Your student's wallet has not been credited.",
     '',
-    'Please try again or contact your school administrator if you need assistance.',
+    'This usually means the prompt on the phone was not approved in time, was declined, or the Mobile Money balance was too low.',
+    '',
+    'Send "hi" to try again, or contact your school administrator if you need assistance.',
   ].join('\n');
 }
 
