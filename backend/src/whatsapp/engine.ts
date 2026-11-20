@@ -1,5 +1,6 @@
 import { amountInRange } from './amount';
 import * as copy from './copy';
+import { amountInText, nameCandidates } from './match';
 import { rwandaMobileOrNull } from './phone';
 import {
   clearStudent,
@@ -10,9 +11,13 @@ import {
 } from './states';
 import type { Intent } from './intent';
 
+/**
+ * Any student ID can be topped up, the same as on the parent portal: money only goes
+ * into the wallet. The balance is the private part, so it is shown only to WhatsApp
+ * numbers the school linked to the student (a parent's, or the student's own).
+ */
 export type Lookup =
   | { kind: 'missing' }
-  | { kind: 'unauthorized'; studentId: string }
   | { kind: 'inactive' }
   | { kind: 'no_wallet' }
   | { kind: 'ok'; student: PublicStudent };
@@ -24,8 +29,14 @@ export type LinkResult =
 export type EngineDeps = {
   now: () => Date;
   sessionMinutes: number;
-  lookup: (phone: string, studentCode: string) => Promise<Lookup>;
+  lookup: (studentCode: string) => Promise<Lookup>;
+  /** Students the school linked to this number. These may see the balance. */
   linkedStudents: (phone: string) => Promise<PublicStudent[]>;
+  /** Linked students plus students this number has already paid for. Offered first. */
+  knownStudents: (phone: string) => Promise<PublicStudent[]>;
+  /** Students named in the message: first and last name, plus the school unless already known to this number. */
+  describe: (phone: string, text: string) => Promise<PublicStudent[]>;
+  canSeeBalance: (phone: string, studentId: string) => Promise<boolean>;
   redeemLinkCode: (phone: string, studentId: string, code: string) => Promise<LinkResult>;
   walletBalance: (studentId: string) => Promise<number | null>;
 };
@@ -76,43 +87,92 @@ function summary(session: WaSession): EngineResult | null {
   };
 }
 
-async function offerLinked(session: WaSession, deps: EngineDeps): Promise<EngineResult> {
-  const students = await deps.linkedStudents(session.waPhone);
-  if (students.length === 1) {
-    const next = { ...rememberStudent(session, students[0]), state: WaState.AWAITING_STUDENT_CONFIRMATION };
-    return { session: next, text: copy.confirmStudent(students[0]), buttons: copy.buttons.student, effect: 'none' };
-  }
-  if (students.length > 1) {
-    return {
-      session: { ...clearStudent(session), state: WaState.REQUESTING_STUDENT_ID },
-      text: copy.chooseChild(students),
-      effect: 'none',
-    };
-  }
+function validAmount(amount: number | null) {
+  return amount != null && amountInRange(amount) ? amount : null;
+}
+
+function confirmFound(session: WaSession, student: PublicStudent, amount: number | null): EngineResult {
+  const next = {
+    ...rememberStudent(session, student),
+    state: WaState.AWAITING_STUDENT_CONFIRMATION,
+    amountRwf: validAmount(amount),
+  };
+  return { session: next, text: copy.confirmStudent(student), buttons: copy.buttons.student, effect: 'none' };
+}
+
+function pickFrom(session: WaSession, students: PublicStudent[], amount: number | null, text: string): EngineResult {
   return {
-    session: { ...clearStudent(session), state: WaState.REQUESTING_STUDENT_ID },
-    text: copy.welcome(),
+    session: { ...clearStudent(session), state: WaState.REQUESTING_STUDENT_ID, amountRwf: validAmount(amount) },
+    text,
     effect: 'none',
   };
 }
 
-async function lookupCode(session: WaSession, code: string, deps: EngineDeps): Promise<EngineResult> {
-  const found = await deps.lookup(session.waPhone, code);
-  if (found.kind === 'missing') {
+/** Offer the students this number is known for, or explain how to name one. */
+async function offerKnown(
+  session: WaSession,
+  deps: EngineDeps,
+  amount: number | null,
+  triedName: boolean,
+): Promise<EngineResult> {
+  const students = await deps.knownStudents(session.waPhone);
+  if (students.length === 1) {
+    const next = {
+      ...rememberStudent(session, students[0]),
+      state: WaState.AWAITING_STUDENT_CONFIRMATION,
+      amountRwf: validAmount(amount),
+    };
     return {
-      session: { ...session, state: WaState.REQUESTING_STUDENT_ID, pendingStudentId: null },
-      text: copy.studentMissing(),
+      session: next,
+      text: copy.offerStudent(students[0], next.amountRwf),
+      buttons: copy.buttons.offer,
       effect: 'none',
     };
   }
-  if (found.kind === 'unauthorized') {
+  if (students.length > 1) {
+    return pickFrom(session, students, amount, copy.chooseChild(students));
+  }
+  return {
+    session: { ...clearStudent(session), state: WaState.REQUESTING_STUDENT_ID, amountRwf: validAmount(amount) },
+    text: triedName ? copy.describeMissing() : copy.welcome(),
+    effect: 'none',
+  };
+}
+
+/** A message in plain words: find the student it names, else offer the known ones. */
+async function findOrOffer(session: WaSession, text: string, deps: EngineDeps): Promise<EngineResult> {
+  const amount = amountInText(text) ?? session.amountRwf;
+  const namesGiven = nameCandidates(text).length >= 2;
+  if (namesGiven) {
+    const found = await deps.describe(session.waPhone, text);
+    if (found.length === 1) return confirmFound(session, found[0], amount);
+    if (found.length > 1) return pickFrom(session, found, amount, copy.chooseFound(found));
+  }
+  const offered = await offerKnown(session, deps, amount, false);
+  if (offered.session.state === WaState.REQUESTING_STUDENT_ID && namesGiven && session.state === WaState.REQUESTING_STUDENT_ID) {
+    // They were asked who the money is for and answered with a name we could not match.
+    return { ...offered, text: copy.describeMissing() };
+  }
+  return offered;
+}
+
+async function lookupCode(
+  session: WaSession,
+  code: string,
+  text: string,
+  deps: EngineDeps,
+): Promise<EngineResult> {
+  const found = await deps.lookup(code);
+  const amount = amountInText(text.replace(new RegExp(code.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'ig'), ' ')) ?? session.amountRwf;
+  if (found.kind === 'missing') {
+    if (nameCandidates(text).length >= 2) {
+      const described = await deps.describe(session.waPhone, text);
+      if (described.length === 1) return confirmFound(session, described[0], amount);
+      if (described.length > 1) return pickFrom(session, described, amount, copy.chooseFound(described));
+    }
     return {
-      session: {
-        ...clearStudent(session),
-        state: WaState.VERIFYING_PARENT,
-        pendingStudentId: found.studentId,
-      },
-      text: copy.studentUnauthorized(),
+      session: { ...session, state: WaState.REQUESTING_STUDENT_ID, pendingStudentId: null },
+      text: copy.studentMissing(),
       effect: 'none',
     };
   }
@@ -122,15 +182,66 @@ async function lookupCode(session: WaSession, code: string, deps: EngineDeps): P
   if (found.kind === 'no_wallet') {
     return { session: { ...clearStudent(session), state: WaState.REQUESTING_STUDENT_ID }, text: copy.walletMissing(), effect: 'none' };
   }
-  const next = {
-    ...rememberStudent(session, found.student),
-    state: WaState.AWAITING_STUDENT_CONFIRMATION,
-    amountRwf: null,
-  };
-  return { session: next, text: copy.confirmStudent(found.student), buttons: copy.buttons.student, effect: 'none' };
+  return confirmFound(session, found.student, amount);
 }
 
-export async function applyTurn(session: WaSession, intent: Intent, deps: EngineDeps): Promise<EngineResult> {
+async function showBalance(current: WaSession, deps: EngineDeps): Promise<EngineResult> {
+  if (!current.studentId) {
+    const students = await deps.linkedStudents(current.waPhone);
+    if (students.length === 0) {
+      return { session: { ...current, state: WaState.REQUESTING_STUDENT_ID }, text: copy.balanceNoStudent(), effect: 'none' };
+    }
+    if (students.length > 1) {
+      const rows: { name: string; studentCode: string; balanceRwf: number }[] = [];
+      for (const student of students) {
+        const balance = await deps.walletBalance(student.id);
+        if (balance != null) rows.push({ name: student.fullName, studentCode: student.studentCode, balanceRwf: balance });
+      }
+      return { session: current, text: rows.length ? copy.balancesText(rows) : copy.walletMissing(), effect: 'none' };
+    }
+    current = rememberStudent(current, students[0]);
+  }
+  const studentId = current.studentId as string;
+  if (!(await deps.canSeeBalance(current.waPhone, studentId))) {
+    return {
+      session: { ...current, state: WaState.VERIFYING_PARENT, pendingStudentId: studentId },
+      text: copy.balanceLocked(current.studentName ?? 'this student'),
+      effect: 'none',
+    };
+  }
+  const balance = await deps.walletBalance(studentId);
+  if (balance == null || !current.studentName || !current.studentCode) {
+    return { session: current, text: copy.walletMissing(), effect: 'none' };
+  }
+  return {
+    session: current,
+    text: copy.balanceText(current.studentName, current.studentCode, balance),
+    effect: 'none',
+  };
+}
+
+function rememberedStudent(current: WaSession): PublicStudent | null {
+  if (!current.studentName) return null;
+  return {
+    id: current.studentId ?? '',
+    studentCode: current.studentCode ?? '',
+    fullName: current.studentName,
+    className: current.className ?? '',
+    schoolName: current.schoolName ?? '',
+    schoolId: current.schoolId ?? '',
+  };
+}
+
+/**
+ * One turn of the conversation. `text` is what they wrote, used to find a student named
+ * in plain words and an amount written in the same message.
+ */
+export async function applyTurn(
+  session: WaSession,
+  intent: Intent,
+  deps: EngineDeps,
+  text = '',
+): Promise<EngineResult> {
   const now = deps.now();
   let current = session;
   const stale = expired(current, now);
@@ -188,40 +299,32 @@ export async function applyTurn(session: WaSession, intent: Intent, deps: Engine
   }
 
   if (intent.type === 'status') {
-    if (current.paymentRequestId) {
+    if (current.paymentRequestId && (current.state === WaState.PAYMENT_PENDING || current.state === WaState.PAYMENT_INITIATED)) {
       return { session: current, text: copy.paymentPending(), effect: 'refresh_payment' };
     }
-    return { session: current, text: 'There is no payment in progress. Send a student ID to start a top-up.', effect: 'none' };
+    return { session: current, text: 'There is no payment in progress. Send a student ID, or the full name and school, to send money.', effect: 'none' };
   }
 
   if (intent.type === 'balance') {
-    if (!current.studentId) {
-      const students = await deps.linkedStudents(current.waPhone);
-      if (students.length !== 1) {
-        return { session: { ...current, state: WaState.REQUESTING_STUDENT_ID }, text: copy.askStudentId(), effect: 'none' };
-      }
-      current = rememberStudent(current, students[0]);
-    }
-    const balance = await deps.walletBalance(current.studentId as string);
-    if (balance == null || !current.studentName || !current.studentCode) {
-      return { session: current, text: copy.walletMissing(), effect: 'none' };
-    }
-    return {
-      session: current,
-      text: copy.balanceText(current.studentName, current.studentCode, balance),
-      effect: 'none',
-    };
+    return showBalance(current, deps);
   }
 
-  if (intent.type === 'greet' || intent.type === 'start') {
+  if (intent.type === 'greet' || intent.type === 'start' || intent.type === 'unknown') {
     if (current.state === WaState.AWAITING_PAYMENT_CONFIRMATION && current.amountRwf) {
       return summary(current) ?? { session: current, text: copy.askAmount(current.studentName ?? 'the student'), effect: 'none' };
     }
-    return offerLinked(current, deps);
+    if (current.state === WaState.INITIAL || current.state === WaState.REQUESTING_STUDENT_ID) {
+      return findOrOffer(current, text, deps);
+    }
+    if (intent.type !== 'unknown' || nameCandidates(text).length >= 2) {
+      // Mid-conversation, a new name or "I want to send money" starts over with that student.
+      const restarted = await findOrOffer({ ...clearStudent(current), state: WaState.INITIAL }, text, deps);
+      if (restarted.session.studentId || intent.type !== 'unknown') return restarted;
+    }
   }
 
   if (intent.type === 'student_id') {
-    return lookupCode(current, intent.studentCode, deps);
+    return lookupCode(current, intent.studentCode, text, deps);
   }
 
   if (intent.type === 'link_code') {
@@ -250,23 +353,33 @@ export async function applyTurn(session: WaSession, intent: Intent, deps: Engine
       ...rememberStudent(current, redeemed.student),
       state: WaState.AWAITING_STUDENT_CONFIRMATION,
     };
-    return { session: next, text: copy.confirmStudent(redeemed.student), buttons: copy.buttons.student, effect: 'none' };
+    const balance = await deps.walletBalance(redeemed.student.id);
+    return { session: next, text: copy.linkedNow(redeemed.student, balance), buttons: copy.buttons.offer, effect: 'none' };
   }
 
   if (intent.type === 'no') {
     return {
       session: { ...clearStudent(current), state: WaState.REQUESTING_STUDENT_ID },
-      text: 'Please send the correct student ID.',
+      text: copy.askStudentId(),
       effect: 'none',
     };
   }
 
   if (intent.type === 'yes') {
-    if (current.state !== WaState.AWAITING_STUDENT_CONFIRMATION || !current.studentId || !current.studentName) {
+    if (
+      (current.state !== WaState.AWAITING_STUDENT_CONFIRMATION && current.state !== WaState.VERIFYING_PARENT) ||
+      !current.studentId ||
+      !current.studentName
+    ) {
       return { session: current, text: copy.askStudentId(), effect: 'none' };
     }
+    const amount = validAmount(amountInText(text) ?? current.amountRwf);
+    const next = { ...current, state: WaState.REQUESTING_AMOUNT, amountRwf: amount, pendingStudentId: null };
+    if (amount != null) {
+      return summary(next) ?? { session: next, text: copy.askPayPhone(), effect: 'none' };
+    }
     return {
-      session: { ...current, state: WaState.REQUESTING_AMOUNT },
+      session: next,
       text: copy.askAmount(current.studentName),
       effect: 'none',
     };
@@ -281,7 +394,7 @@ export async function applyTurn(session: WaSession, intent: Intent, deps: Engine
       return { session: { ...current, state: WaState.REQUESTING_STUDENT_ID }, text: copy.askStudentId(), effect: 'none' };
     }
     if (!amountInRange(intent.amountRwf)) {
-      return { session: { ...current, state: WaState.REQUESTING_AMOUNT }, text: copy.invalidAmount(), effect: 'none' };
+      return { session: { ...current, state: WaState.REQUESTING_AMOUNT, amountRwf: null }, text: copy.invalidAmount(), effect: 'none' };
     }
     const next = { ...current, amountRwf: intent.amountRwf, state: WaState.REQUESTING_AMOUNT };
     return summary(next) ?? { session: next, text: copy.askPayPhone(), effect: 'none' };
@@ -301,23 +414,14 @@ export async function applyTurn(session: WaSession, intent: Intent, deps: Engine
   }
 
   if (intent.type === 'unknown') {
-    if (current.state === WaState.REQUESTING_STUDENT_ID || current.state === WaState.INITIAL) {
-      return { session: { ...current, state: WaState.REQUESTING_STUDENT_ID }, text: copy.askStudentId(), effect: 'none' };
-    }
     if (current.state === WaState.REQUESTING_AMOUNT) {
       return { session: current, text: copy.askAmount(current.studentName ?? 'the student'), effect: 'none' };
     }
     if (current.state === WaState.AWAITING_STUDENT_CONFIRMATION) {
+      const student = rememberedStudent(current);
       return {
         session: current,
-        text: current.studentName ? copy.confirmStudent({
-          id: current.studentId ?? '',
-          studentCode: current.studentCode ?? '',
-          fullName: current.studentName,
-          className: current.className ?? '',
-          schoolName: current.schoolName ?? '',
-          schoolId: current.schoolId ?? '',
-        }) : copy.askStudentId(),
+        text: student ? copy.confirmStudent(student) : copy.askStudentId(),
         buttons: copy.buttons.student,
         effect: 'none',
       };
@@ -326,7 +430,7 @@ export async function applyTurn(session: WaSession, intent: Intent, deps: Engine
       return summary(current) ?? { session: current, text: copy.unrelated(), effect: 'none' };
     }
     if (current.state === WaState.VERIFYING_PARENT) {
-      return { session: current, text: copy.studentUnauthorized(), effect: 'none' };
+      return { session: current, text: copy.balanceLocked(current.studentName ?? 'this student'), effect: 'none' };
     }
   }
 

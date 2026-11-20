@@ -32,14 +32,17 @@ function deps(over: Partial<EngineDeps> = {}): EngineDeps {
     sessionMinutes: 30,
     lookup: async () => ({ kind: 'missing' }),
     linkedStudents: async () => [],
+    knownStudents: async () => [],
+    describe: async () => [],
+    canSeeBalance: async () => false,
     redeemLinkCode: async () => ({ ok: false, reason: 'invalid' }),
     walletBalance: async () => 1200,
     ...over,
   };
 }
 
-async function turn(state: WaSession, intent: Intent, extra?: Partial<EngineDeps>) {
-  return applyTurn(state, intent, deps(extra));
+async function turn(state: WaSession, intent: Intent, extra?: Partial<EngineDeps>, text = '') {
+  return applyTurn(state, intent, deps(extra), text);
 }
 
 describe('WhatsApp top-up conversation', () => {
@@ -67,15 +70,70 @@ describe('WhatsApp top-up conversation', () => {
     expect(confirmed.session.amountRwf).toBe(10000);
   });
 
-  it('does not reveal a student to an unlinked WhatsApp number', async () => {
-    const result = await turn(session(), { type: 'student_id', studentCode: 'EKF-2026-001' }, {
-      lookup: async (): Promise<Lookup> => ({ kind: 'unauthorized', studentId: 'stu-1' }),
+  it('lets any number top up by student ID but keeps the balance for linked numbers', async () => {
+    const found = await turn(session(), { type: 'student_id', studentCode: 'EKF-2026-001' }, {
+      lookup: async (): Promise<Lookup> => ({ kind: 'ok', student: jean }),
     });
-    expect(result.text).not.toContain('Jean Claude');
-    expect(result.text).toContain('No student details have been shared');
-    expect(result.session.state).toBe(WaState.VERIFYING_PARENT);
-    expect(result.session.studentName).toBeNull();
-    expect(result.effect).toBe('none');
+    expect(found.text).toContain('Jean Claude');
+    expect(found.session.state).toBe(WaState.AWAITING_STUDENT_CONFIRMATION);
+
+    const balance = await turn(found.session, { type: 'balance' }, { canSeeBalance: async () => false });
+    expect(balance.text).not.toContain('1,200');
+    expect(balance.session.state).toBe(WaState.VERIFYING_PARENT);
+    expect(balance.session.pendingStudentId).toBe(jean.id);
+
+    const linked = await turn(found.session, { type: 'balance' }, { canSeeBalance: async () => true });
+    expect(linked.text).toContain('1,200 RWF');
+  });
+
+  it('finds a student from a name and school, with the amount from the same message', async () => {
+    const text = 'Send 5,000 to Jean Claude at Green Hills';
+    const found = await turn(session(), { type: 'start' }, {
+      describe: async (_phone, said) => (said === text ? [jean] : []),
+    }, text);
+    expect(found.text).toContain('Jean Claude');
+    expect(found.session.state).toBe(WaState.AWAITING_STUDENT_CONFIRMATION);
+    expect(found.session.amountRwf).toBe(5000);
+
+    const yes = await turn(found.session, { type: 'yes' }, {}, 'Yes');
+    expect(yes.session.state).toBe(WaState.AWAITING_PAYMENT_CONFIRMATION);
+    expect(yes.text).toContain('5,000 RWF');
+    expect(yes.effect).toBe('none');
+  });
+
+  it('says so when a described student is not found, without guessing', async () => {
+    const result = await turn(
+      session({ state: WaState.REQUESTING_STUDENT_ID }),
+      { type: 'unknown' },
+      {},
+      'Keza Uwase, Green Hills',
+    );
+    expect(result.text).toContain('could not find');
+    expect(result.session.studentId).toBeNull();
+  });
+
+  it('offers the student a known number has paid for, and takes a bare amount as yes', async () => {
+    const offered = await turn(session(), { type: 'greet' }, { knownStudents: async () => [jean] }, 'Hello');
+    expect(offered.text).toContain('Would you like to send money to Jean Claude');
+    expect(offered.session.state).toBe(WaState.AWAITING_STUDENT_CONFIRMATION);
+
+    const amount = await turn(offered.session, { type: 'yes' }, {}, '3000');
+    expect(amount.session.state).toBe(WaState.AWAITING_PAYMENT_CONFIRMATION);
+    expect(amount.session.amountRwf).toBe(3000);
+  });
+
+  it('lists every linked child balance when asked without naming one', async () => {
+    const result = await turn(session(), { type: 'balance' }, {
+      linkedStudents: async () => [jean, alice],
+      walletBalance: async (id) => (id === jean.id ? 1200 : 800),
+    });
+    expect(result.text).toContain('Jean Claude (EKF-2026-001): 1,200 RWF');
+    expect(result.text).toContain('Alice Uwase (EKF-2026-002): 800 RWF');
+  });
+
+  it('tells an unlinked number how to get balance access', async () => {
+    const result = await turn(session(), { type: 'balance' });
+    expect(result.text).toContain('not linked');
   });
 
   it('rejects an unknown student id and an out-of-range amount', async () => {
@@ -135,11 +193,11 @@ describe('WhatsApp top-up conversation', () => {
   });
 
   it('supports one or several children linked to the same phone', async () => {
-    const one = await turn(session(), { type: 'start' }, { linkedStudents: async () => [jean] });
+    const one = await turn(session(), { type: 'start' }, { knownStudents: async () => [jean] });
     expect(one.session.studentCode).toBe('EKF-2026-001');
     expect(one.session.state).toBe(WaState.AWAITING_STUDENT_CONFIRMATION);
 
-    const many = await turn(session(), { type: 'start' }, { linkedStudents: async () => [jean, alice] });
+    const many = await turn(session(), { type: 'start' }, { knownStudents: async () => [jean, alice] });
     expect(many.text).toContain('EKF-2026-001');
     expect(many.text).toContain('EKF-2026-002');
     expect(many.session.studentId).toBeNull();

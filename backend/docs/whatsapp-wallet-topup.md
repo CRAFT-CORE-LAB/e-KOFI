@@ -1,8 +1,30 @@
-# WhatsApp wallet top-up
+# WhatsApp wallet top-up (through Shaka)
 
-WhatsApp is an extra way for a parent to use the existing e-KOFI top-up. The parent portal, student portal, Intouch callback, wallet ledger, and 3% service fee are unchanged. A WhatsApp payment is a `PaymentIntent` with `channel = WHATSAPP`. When Intouch confirms it, `FinanceService.parentTopUp` credits the same student wallet the portal uses.
+Parents and students use Shaka's WhatsApp number as the front door to e-KOFI. Cashiers keep using the e-KOFI app, because serving a student needs the fingerprint device.
 
-There is no separate parent login in e-KOFI. Knowing a student ID opens the parent portal, but it does not open a WhatsApp conversation. The school links the parent's WhatsApp number to the student, or gives the parent a one-time 6-digit link code. Student name, class, and school are sent only after that check.
+- A **parent** messages Shaka. If the number is linked to a student, or has paid for one before, e-KOFI offers that student straight away ("Would you like to send money to Keza Uwase's wallet?"). Otherwise the parent sends the student ID, or the student's full name and school, for example "Send 5,000 to Keza Uwase at Green Hills Academy". The amount can be in the same message. After the summary and **Confirm payment**, Intouch sends the MTN MoMo or Airtel Money prompt to the parent's number (or another number they give).
+- A **student** (or parent) asks "balance". The balance is shown only to WhatsApp numbers the school linked to that student. Link a student's own phone the same way as a parent's, with the label "Student".
+
+WhatsApp is an extra way to use the existing e-KOFI top-up. The parent portal, student portal, Intouch callback, wallet ledger, and 3% service fee are unchanged. A WhatsApp payment is a `PaymentIntent` with `channel = WHATSAPP`. When Intouch confirms it, `FinanceService.parentTopUp` credits the same student wallet the portal uses.
+
+## Who can do what
+
+| Action | Who |
+| --- | --- |
+| Send money to a student | Anyone who gives the student ID, or the full first and last name plus the school. This matches the parent portal, where the student ID is enough. Money only goes into the wallet. |
+| Be offered a student without naming one | Numbers the school linked to the student, and numbers that already paid for the student |
+| Find a student by name without the school | Only among the students this number is already linked to or paid for, so a name alone never reveals which school a child attends |
+| See the balance | Only numbers the school linked (or that redeemed a 6-digit link code from the school) |
+
+## How Shaka and e-KOFI talk
+
+1. Meta posts every message for Shaka's number to Shaka (`mail.shaka.rw/api/webhooks/whatsapp`).
+2. Shaka offers it to e-KOFI: `POST https://ekofi-api.ekofi.workers.dev/api/whatsapp/bridge`, body `{ message: { id, from, kind, text, buttonId }, shakaLead }`, signed in `X-Shaka-Signature: sha256=<HMAC of the body>`.
+3. e-KOFI answers `{ handled: true }` when the message is for it: a conversation in progress, one of its buttons, a number linked to or that paid for a student, an existing student ID, or (only when Shaka has not been talking to that number about its own business, `shakaLead: false`) words such as "balance", "school", "top up", "amafaranga", or a school's name.
+4. While answering, e-KOFI sends its replies through `POST https://mail.shaka.rw/api/bridge/ekofi/send`, body `{ to, text, buttons?, template? }`, signed in `X-Ekofi-Signature`. Payment results that arrive later from Intouch go out the same way.
+5. If e-KOFI says no, is down, or times out, Shaka handles the message as before. Messages e-KOFI took stay out of Shaka chat and the info@ inbox (`wa_messages.source = 'ekofi'`).
+
+Both sides use one shared secret: `SHAKA_BRIDGE_SECRET` on `ekofi-api`, `EKOFI_BRIDGE_SECRET` on Shaka's `mail` Worker.
 
 ## What you configure
 
@@ -22,6 +44,8 @@ Add these on the API process. On Cloudflare, set them as Worker secrets or vars.
 | `WHATSAPP_TEMPLATE_FAILED` | Approved template name for a failed payment |
 | `WHATSAPP_TEMPLATE_LANG` | Template language code. Defaults to `en` |
 | `WHATSAPP_SESSION_MINUTES` | Idle time before a confirmation expires. Defaults to 30. Minimum 5, maximum 180 |
+| `SHAKA_BRIDGE_URL` | Shaka's send endpoint, `https://mail.shaka.rw/api/bridge/ekofi/send`. When set (with the secret), every reply goes out through Shaka's number and the `WHATSAPP_ACCESS_TOKEN` direct send is not used |
+| `SHAKA_BRIDGE_SECRET` | Shared HMAC secret with Shaka. Secret, never committed |
 
 Intouch still uses `INTOUCH_USERNAME`, `INTOUCH_ACCOUNT_NO`, `INTOUCH_PARTNER_PASSWORD`, `INTOUCH_ENV`, and `INTOUCH_CALLBACK_URL`. The callback URL stays on this API. Intouch must not be pointed at OpenAI.
 
@@ -61,14 +85,16 @@ npx wrangler d1 execute ekofi --remote --file=prisma/d1/0002_whatsapp_topup.sql
 
 Use `--local` instead of `--remote` when updating a local D1 database. Then deploy the Worker as usual (`npm run deploy`), which regenerates the D1 Prisma client.
 
-## Parent authorization
+## Linking numbers (for the balance)
 
 1. Open the student in the admin app.
-2. Link the parent WhatsApp number, or create a 24-hour link code and give that code to the parent.
-3. The parent messages the e-KOFI WhatsApp number, sends the student ID, and confirms the child.
-4. The charge is requested on that WhatsApp number when it is a Rwandan MTN or Airtel number. Otherwise the assistant asks for the mobile-money number that will approve the prompt.
+2. Link the parent's (or the student's own) WhatsApp number, or create a 24-hour link code and give that code to them.
+3. A linked number is offered the student when it writes to Shaka, and can ask for the balance. A number that asks for a balance it may not see is asked for the link code.
+4. The charge is requested on the WhatsApp number when it is a Rwandan MTN or Airtel number. Otherwise the assistant asks for the mobile-money number that will approve the prompt.
 
 A link code is stored only as a hash. The admin screen shows the code once.
+
+The `ekofi_payment_success` and `ekofi_payment_failed` templates below must be created on Shaka's WhatsApp Business account (the number that now sends), not e-KOFI's own.
 
 ## Conversation
 

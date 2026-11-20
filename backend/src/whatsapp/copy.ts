@@ -11,6 +11,10 @@ export const buttons = {
     { id: 'confirm_student', title: 'Yes, confirm' },
     { id: 'reject_student', title: 'No, try again' },
   ],
+  offer: [
+    { id: 'confirm_student', title: 'Yes, send money' },
+    { id: 'reject_student', title: 'No' },
+  ],
   payment: [
     { id: 'confirm_payment', title: 'Confirm payment' },
     { id: 'cancel_payment', title: 'Cancel payment' },
@@ -18,11 +22,61 @@ export const buttons = {
 };
 
 export function welcome() {
-  return 'Hello! Welcome to e-KOFI. I can help you top up your child\'s school wallet. Please provide the student\'s ID.';
+  return [
+    "Hello! This is e-KOFI on Shaka. I can send money to a student's e-KOFI school wallet.",
+    '',
+    "Tell me who it is for: the student ID from the school card, or the student's full name and school.",
+    'For example: "Send 5,000 to Keza Uwase at Green Hills Academy".',
+  ].join('\n');
 }
 
 export function askStudentId() {
-  return 'Please send the student ID, for example the code printed on the school card.';
+  return "Please send the student ID from the school card, or the student's full name and school.";
+}
+
+export function describeMissing() {
+  return 'I could not find that student. Check the spelling of the first and last name and include the school name, or send the student ID from the school card.';
+}
+
+export function offerStudent(student: PublicStudent, amountRwf: number | null) {
+  const first = student.fullName.split(' ')[0] || student.fullName;
+  const what = amountRwf ? `${rwf(amountRwf)} to ${student.fullName}` : `money to ${student.fullName}`;
+  return [
+    `Hello! This WhatsApp number is linked to ${student.fullName} (${student.className}, ${student.schoolName}) on e-KOFI.`,
+    '',
+    `Would you like to send ${what}'s wallet?`,
+    '',
+    `To pay for someone else, send their student ID, or their full name and school. Ask "balance" to see ${first}'s balance.`,
+  ].join('\n');
+}
+
+export function chooseFound(students: PublicStudent[]) {
+  const lines = students.map(
+    (student) => `${student.fullName} · ${student.className} · ${student.schoolName} · ${student.studentCode}`,
+  );
+  return `I found more than one student with that name:\n\n${lines.join('\n')}\n\nReply with the student ID of the one you mean.`;
+}
+
+export function balanceLocked(name: string) {
+  return `Only WhatsApp numbers the school has linked to ${name} can see the balance. Send the 6-digit link code from the school, or ask the school to link this number. You can still send money to the wallet.`;
+}
+
+export function balanceNoStudent() {
+  return 'This WhatsApp number is not linked to a student yet, so I cannot show a balance. Ask the school to link this number to the student (a student can have their own number linked too). You can still send money: send the student ID, or the full name and school.';
+}
+
+export function balancesText(rows: { name: string; studentCode: string; balanceRwf: number }[]) {
+  const lines = rows.map((row) => `${row.name} (${row.studentCode}): ${rwf(row.balanceRwf)}`);
+  return `e-KOFI wallet balances:\n\n${lines.join('\n')}`;
+}
+
+export function linkedNow(student: PublicStudent, balanceRwf: number | null) {
+  return [
+    `This WhatsApp number is now linked to ${student.fullName} (${student.className}, ${student.schoolName}).`,
+    ...(balanceRwf == null ? [] : [`Balance: ${rwf(balanceRwf)}.`]),
+    '',
+    'Would you like to send money to the wallet?',
+  ].join('\n');
 }
 
 export function studentMissing() {
@@ -144,7 +198,7 @@ export function cancelled() {
 }
 
 export function expired() {
-  return 'This conversation has expired, so the previous top-up was not started. Please provide the student ID to begin again.';
+  return 'This conversation has expired, so the previous top-up was not started. Send the student ID, or the full name and school, to begin again.';
 }
 
 export function linkFailed() {
@@ -160,7 +214,7 @@ export function balanceText(name: string, studentCode: string, balanceRwf: numbe
 }
 
 export function unrelated() {
-  return 'I can help you top up a student wallet. Send the student ID, or say you want to top up.';
+  return "I can send money to a student's e-KOFI wallet or show a balance. Send the student ID, or the student's full name and school.";
 }
 
 export function stillPending() {

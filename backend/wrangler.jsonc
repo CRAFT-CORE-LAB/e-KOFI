@@ -29,7 +29,8 @@
     "WHATSAPP_TEMPLATE_SUCCESS": "ekofi_payment_success",
     "WHATSAPP_TEMPLATE_FAILED": "ekofi_payment_failed",
     "WHATSAPP_TEMPLATE_LANG": "en",
-    "WHATSAPP_SESSION_MINUTES": "30"
+    "WHATSAPP_SESSION_MINUTES": "30",
+    "SHAKA_BRIDGE_URL": "https://mail.shaka.rw/api/bridge/ekofi/send"
   },
   "d1_databases": [
     {

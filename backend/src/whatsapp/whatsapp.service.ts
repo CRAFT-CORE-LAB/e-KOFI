@@ -10,6 +10,8 @@ import { WhatsAppCloudService } from './cloud.service';
 import * as copy from './copy';
 import { applyTurn, type EngineDeps, type EngineResult } from './engine';
 import type { InboundMessage } from './inbound';
+import { extractStudentCode } from './intent';
+import { soundsLikeEkofi } from './match';
 import { canonicalPhone } from './phone';
 import { blankSession, WaSession, WaState } from './states';
 
@@ -34,6 +36,8 @@ type ConversationRow = {
   expiresAt: Date;
 };
 
+const OUR_BUTTONS = new Set(['confirm_student', 'reject_student', 'confirm_payment', 'cancel_payment']);
+
 @Injectable()
 export class WhatsAppService {
   constructor(
@@ -44,6 +48,32 @@ export class WhatsAppService {
     private readonly ai: WhatsAppAiService,
     private readonly cloud: WhatsAppCloudService,
   ) {}
+
+  /**
+   * Shaka's WhatsApp number carries Shaka's own customers as well as e-KOFI parents and
+   * students, so Shaka asks before handing a message over. A conversation in progress,
+   * one of our buttons, a number linked to (or that paid for) a student, or a real
+   * student ID is always ours. Words like "school" or "balance", or a school's name,
+   * count only when Shaka has not been talking to that number about its own business.
+   */
+  async claims(message: InboundMessage, shakaLead: boolean): Promise<boolean> {
+    const waPhone = canonicalPhone(message.from);
+    if (!/^\d{9,15}$/.test(waPhone)) return false;
+    if (message.buttonId && OUR_BUTTONS.has(message.buttonId)) return true;
+    const convo = await this.prisma.whatsAppConversation.findUnique({ where: { waPhone } });
+    if (convo) {
+      if (convo.state === WaState.PAYMENT_PENDING || convo.state === WaState.PAYMENT_INITIATED) return true;
+      if (convo.state !== WaState.INITIAL && convo.expiresAt.getTime() > Date.now()) return true;
+    }
+    if ((await this.guardians.known(waPhone)).length) return true;
+    const text = message.text.trim();
+    if (!text) return false;
+    const code = extractStudentCode(text);
+    if (code && /[A-Z]/i.test(code) && /\d/.test(code) && (await this.guardians.hasStudentCode(code))) return true;
+    if (shakaLead) return false;
+    if (soundsLikeEkofi(text)) return true;
+    return this.guardians.namesSchool(text);
+  }
 
   async handleInbound(message: InboundMessage) {
     const waPhone = canonicalPhone(message.from);
@@ -68,12 +98,12 @@ export class WhatsAppService {
 
     try {
       if (message.kind !== 'text' && message.kind !== 'button') {
-        await this.dispatch(convo.id, waPhone, 'Please send a text message. I can help you top up a student wallet.');
+        await this.dispatch(convo.id, waPhone, "Please send a text message. I can send money to a student's e-KOFI wallet or show a balance.");
         return;
       }
       const session = this.toSession(convo);
       const intent = await this.ai.interpret(session.state, message.text, message.buttonId);
-      const outcome = await applyTurn(session, intent, this.deps());
+      const outcome = await applyTurn(session, intent, this.deps(), message.text);
       await this.finish(convo, outcome);
     } catch (error) {
       await this.prisma.whatsAppMessage.deleteMany({ where: { waMessageId: message.id } });
@@ -251,8 +281,11 @@ export class WhatsAppService {
     return {
       now: () => new Date(),
       sessionMinutes: this.sessionMinutes(),
-      lookup: (phone, code) => this.guardians.lookup(phone, code),
+      lookup: (code) => this.guardians.lookup(code),
       linkedStudents: (phone) => this.guardians.linked(phone),
+      knownStudents: (phone) => this.guardians.known(phone),
+      describe: (phone, text) => this.guardians.describe(phone, text),
+      canSeeBalance: (phone, studentId) => this.guardians.canSeeBalance(phone, studentId),
       redeemLinkCode: (phone, studentId, code) => this.guardians.redeem(phone, studentId, code),
       walletBalance: (studentId) => this.guardians.balance(studentId),
     };

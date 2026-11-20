@@ -31,6 +31,8 @@ interface CloudflareEnv {
   WHATSAPP_TEMPLATE_FAILED?: string;
   WHATSAPP_TEMPLATE_LANG?: string;
   WHATSAPP_SESSION_MINUTES?: string;
+  SHAKA_BRIDGE_URL?: string;
+  SHAKA_BRIDGE_SECRET?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
 }

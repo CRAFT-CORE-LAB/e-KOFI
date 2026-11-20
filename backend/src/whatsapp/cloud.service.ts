@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -10,7 +11,7 @@ export class WhatsAppCloudService {
   constructor(private readonly config: ConfigService) {}
 
   configured() {
-    return Boolean(this.token && this.phoneNumberId);
+    return Boolean(this.bridgeUrl || (this.token && this.phoneNumberId));
   }
 
   async deliver(
@@ -19,6 +20,7 @@ export class WhatsAppCloudService {
     buttons?: { id: string; title: string }[],
     template?: { name: string; params: string[] },
   ): Promise<SendResult> {
+    if (this.bridgeUrl) return this.relay(to, text, buttons, template);
     const first = buttons?.length ? await this.sendButtons(to, text, buttons) : await this.sendText(to, text);
     if (first.ok || !template?.name) return first;
     if (first.errorCode !== 131047 && first.errorCode !== 131026) return first;
@@ -93,6 +95,58 @@ export class WhatsAppCloudService {
       this.logger.warn('WhatsApp send could not reach Meta');
       return { ok: false, errorCode: 'network' };
     }
+  }
+
+  /**
+   * Send through Shaka's WhatsApp number. Shaka sends the text (or buttons) and, when
+   * Meta refuses free text because the 24-hour window closed, the template.
+   */
+  private async relay(
+    to: string,
+    text: string,
+    buttons?: { id: string; title: string }[],
+    template?: { name: string; params: string[] },
+  ): Promise<SendResult> {
+    const body = JSON.stringify({
+      to,
+      text: text.slice(0, 4096),
+      ...(buttons?.length ? { buttons: buttons.slice(0, 3) } : {}),
+      ...(template?.name
+        ? {
+            template: {
+              name: template.name,
+              lang: this.config.get<string>('WHATSAPP_TEMPLATE_LANG')?.trim() || 'en',
+              params: template.params,
+            },
+          }
+        : {}),
+    });
+    const signature = `sha256=${createHmac('sha256', this.bridgeSecret).update(body).digest('hex')}`;
+    try {
+      const response = await fetch(this.bridgeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Ekofi-Signature': signature },
+        body,
+      });
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; errorCode?: number | string };
+      if (!response.ok || !data.ok) {
+        this.logger.warn(`Shaka WhatsApp relay failed (${String(data.errorCode ?? response.status)})`);
+        return { ok: false, errorCode: data.errorCode ?? response.status };
+      }
+      return { ok: true };
+    } catch {
+      this.logger.warn('Shaka WhatsApp relay could not be reached');
+      return { ok: false, errorCode: 'network' };
+    }
+  }
+
+  private get bridgeUrl() {
+    const url = this.config.get<string>('SHAKA_BRIDGE_URL')?.trim() ?? '';
+    return url && this.bridgeSecret ? url : '';
+  }
+
+  private get bridgeSecret() {
+    return this.config.get<string>('SHAKA_BRIDGE_SECRET')?.trim() ?? '';
   }
 
   private get token() {

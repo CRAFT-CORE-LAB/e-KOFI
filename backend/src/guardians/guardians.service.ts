@@ -2,8 +2,9 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
-import { StudentStatus } from '../domain/enums';
+import { PaymentIntentStatus, StudentStatus } from '../domain/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { mentionsSchool, mentionsStudent, nameCandidates, nameVariants } from '../whatsapp/match';
 import { canonicalPhone } from '../whatsapp/phone';
 import type { LinkResult, Lookup } from '../whatsapp/engine';
 import type { PublicStudent } from '../whatsapp/states';
@@ -75,17 +76,13 @@ export class GuardiansService {
     return { code, expiresAt: expiresAt.toISOString() };
   }
 
-  async lookup(phone: string, studentCode: string): Promise<Lookup> {
+  async lookup(studentCode: string): Promise<Lookup> {
     const code = studentCode.trim().replace(/\s+/g, '').toUpperCase();
     const student = await this.prisma.student.findUnique({
       where: { studentCode: code },
       include: studentView,
     });
     if (!student) return { kind: 'missing' };
-    const guardian = await this.prisma.studentGuardian.findUnique({
-      where: { studentId_phone: { studentId: student.id, phone } },
-    });
-    if (!guardian) return { kind: 'unauthorized', studentId: student.id };
     if (student.status !== StudentStatus.ACTIVE) return { kind: 'inactive' };
     if (!student.wallet) return { kind: 'no_wallet' };
     return { kind: 'ok', student: this.present(student) };
@@ -100,6 +97,87 @@ export class GuardiansService {
     return rows
       .filter((row) => row.student.status === StudentStatus.ACTIVE && row.student.wallet)
       .map((row) => this.present(row.student));
+  }
+
+  /** Linked students, then students this number has already paid for (portal or WhatsApp). */
+  async known(phone: string): Promise<PublicStudent[]> {
+    const linked = await this.linked(phone);
+    const seen = new Set(linked.map((student) => student.id));
+    const paid = await this.prisma.paymentIntent.findMany({
+      where: { phone: { in: phoneForms(phone) }, status: PaymentIntentStatus.POSTED },
+      select: { studentId: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    const extraIds = [...new Set(paid.map((row) => row.studentId))].filter((id) => !seen.has(id));
+    if (!extraIds.length) return linked;
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: extraIds }, status: StudentStatus.ACTIVE },
+      include: studentView,
+    });
+    const order = new Map(extraIds.map((id, index) => [id, index]));
+    const extra = students
+      .filter((student) => student.wallet)
+      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      .map((student) => this.present(student));
+    return [...linked, ...extra].slice(0, 8);
+  }
+
+  async canSeeBalance(phone: string, studentId: string) {
+    const guardian = await this.prisma.studentGuardian.findUnique({
+      where: { studentId_phone: { studentId, phone } },
+    });
+    return Boolean(guardian);
+  }
+
+  /**
+   * Students named in a message such as "send 5000 to Keza Uwase at Green Hills".
+   * Both the first and the last name must be written. A student this number already
+   * knows is found by name alone; anyone else also needs their school named, so a
+   * name on its own never reveals which school a child attends.
+   */
+  async describe(phone: string, text: string): Promise<PublicStudent[]> {
+    const candidates = nameCandidates(text);
+    if (candidates.length < 2) return [];
+    const known = (await this.known(phone)).filter((student) => {
+      const [first, ...rest] = student.fullName.split(' ');
+      return mentionsStudent(text, first ?? '', rest.join(' '));
+    });
+    if (known.length) return known;
+
+    const schools = await this.prisma.school.findMany({ select: { id: true, name: true } });
+    const named = schools.filter((school) => mentionsSchool(text, school.name));
+    if (!named.length) return [];
+    const variants = candidates.flatMap(nameVariants).slice(0, 90);
+    const rows = await this.prisma.student.findMany({
+      where: {
+        schoolId: { in: named.map((school) => school.id) },
+        status: StudentStatus.ACTIVE,
+        OR: [{ firstName: { in: variants } }, { lastName: { in: variants } }],
+      },
+      include: studentView,
+      take: 200,
+    });
+    return rows
+      .filter((student) => student.wallet && mentionsStudent(text, student.firstName, student.lastName))
+      .slice(0, 6)
+      .map((student) => this.present(student));
+  }
+
+  /** True when the message names a school on e-KOFI. Used to pick up Shaka messages meant for e-KOFI. */
+  async namesSchool(text: string) {
+    if (nameCandidates(text).length < 1) return false;
+    const schools = await this.prisma.school.findMany({ select: { name: true } });
+    return schools.some((school) => mentionsSchool(text, school.name));
+  }
+
+  /** True when the message carries a student ID that exists. */
+  async hasStudentCode(code: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { studentCode: code.trim().replace(/\s+/g, '').toUpperCase() },
+      select: { id: true },
+    });
+    return Boolean(student);
   }
 
   async redeem(phone: string, studentId: string, code: string): Promise<LinkResult> {
@@ -180,4 +258,15 @@ export class GuardiansService {
       schoolId: student.schoolId,
     };
   }
+}
+
+/** A payment may have stored the number as 2507…, 07… or 7…. */
+function phoneForms(phone: string) {
+  const forms = new Set([phone]);
+  if (/^2507\d{8}$/.test(phone)) {
+    forms.add(`0${phone.slice(3)}`);
+    forms.add(phone.slice(3));
+    forms.add(`+${phone}`);
+  }
+  return [...forms];
 }

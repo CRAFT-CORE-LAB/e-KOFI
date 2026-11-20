@@ -20,7 +20,8 @@ export type Intent =
 const START = /\b(top[\s-]?up|deposit|add money|fund|wallet|lunch money|send money|pay for)\b/i;
 const CANCEL = /\b(cancel|stop|never mind|nevermind|abort)\b/i;
 const STATUS = /\b(status|complete|completed|gone through|processed|pending|did it|is my payment)\b/i;
-const BALANCE = /\b(balance|how much (is|does)|wallet balance)\b/i;
+const BALANCE = /\b(balance|how much (money )?(is|does|do|has)|wallet balance|solde|amafaranga asigaye|asigaranye)\b/i;
+const BARE_AMOUNT = /^\s*\d[\d\s.,]*\s*(k|rwf|frw)?\s*$/i;
 const NO = /\b(no|nope|wrong|not my|try again|different student|incorrect)\b/i;
 const YES = /^(yes|yeah|yep|confirm|ok|okay|correct|that's my|that is my)\b/i;
 const CONFIRM_PAY = /\b(confirm payment|proceed|yes,? pay|pay now|go ahead)\b/i;
@@ -29,6 +30,8 @@ export function extractStudentCode(text: string) {
   const trimmed = text.trim();
   const labeled = trimmed.match(/\b([A-Za-z]{1,8}[-/][A-Za-z0-9-]{2,24})\b/);
   if (labeled) return labeled[1].replace(/\s+/g, '').replace(/\//g, '-').toUpperCase();
+  // "STU 000123" is a code; "Keza Uwase S2 Green Hills" is a description, not a code.
+  if (trimmed.split(/\s+/).length > 2) return null;
   const compact = trimmed.replace(/\s+/g, '');
   if (/^[A-Za-z0-9-]{2,32}$/.test(compact) && /[A-Za-z]/.test(compact) && /\d/.test(compact)) {
     return compact.toUpperCase();
@@ -70,6 +73,11 @@ function localIntent(state: string, text: string, buttonId?: string): Intent {
     if (parsed.ok) return { type: 'amount', amountRwf: parsed.value };
   }
   if (state === WaState.AWAITING_STUDENT_CONFIRMATION && YES.test(trimmed)) return { type: 'yes' };
+  if (state === WaState.AWAITING_STUDENT_CONFIRMATION && BARE_AMOUNT.test(trimmed)) {
+    // "Send money to Jean?" answered with "5000": yes, and that amount.
+    const parsed = parseAmountRwf(trimmed);
+    if (parsed.ok && amountInRange(parsed.value)) return { type: 'yes' };
+  }
   if (state === WaState.AWAITING_PAYMENT_CONFIRMATION && YES.test(trimmed)) return { type: 'confirm_payment' };
   if (NO.test(trimmed) && (state === WaState.AWAITING_STUDENT_CONFIRMATION || state === WaState.VERIFYING_PARENT)) {
     return { type: 'no' };
