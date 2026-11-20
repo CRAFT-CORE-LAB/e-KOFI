@@ -159,9 +159,9 @@ describe('WhatsApp top-up conversation', () => {
         studentName: jean.fullName,
         studentCode: jean.studentCode,
       }),
-      { type: 'amount', amountRwf: 100 },
+      { type: 'amount', amountRwf: 99 },
     );
-    expect(amount.text).toContain('500');
+    expect(amount.text).toContain('100 RWF');
     expect(amount.session.amountRwf).toBeNull();
     expect(amount.effect).toBe('none');
   });

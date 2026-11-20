@@ -21,8 +21,8 @@ describe('what a parent reads when a payment cannot start', () => {
   });
 
   it('passes on messages written for parents', () => {
-    expect(text(new BadRequestException('Enter an amount between 500 and 500,000 RWF.'))).toBe(
-      'Enter an amount between 500 and 500,000 RWF.',
+    expect(text(new BadRequestException('Enter an amount between 100 and 500,000 RWF.'))).toBe(
+      'Enter an amount between 100 and 500,000 RWF.',
     );
   });
 });

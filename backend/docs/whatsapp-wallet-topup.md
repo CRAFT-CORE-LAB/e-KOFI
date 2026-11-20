@@ -60,7 +60,7 @@ Add these on the API process. On Cloudflare, set them as Worker secrets or vars.
 
 Intouch still uses `INTOUCH_USERNAME`, `INTOUCH_ACCOUNT_NO`, `INTOUCH_PARTNER_PASSWORD`, `INTOUCH_ENV`, and `INTOUCH_CALLBACK_URL`. The callback URL stays on this API. Intouch must not be pointed at OpenAI.
 
-Existing top-up limits stay in force: 500 to 500,000 RWF, with the current 3% service fee. The assistant cannot change those limits.
+Top-up limits: 100 to 500,000 RWF (the minimum was 500 until 2026-11-20), with the current 3% service fee. The same limits apply on the parent portal. The assistant cannot change them.
 
 ## Meta webhook
 

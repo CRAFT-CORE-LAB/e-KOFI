@@ -46,7 +46,9 @@ export class PaymentsService {
     channel: PaymentChannel = 'PARENT_PORTAL',
   ) {
     if (!Number.isInteger(grossRwf) || grossRwf < TOPUP_MIN_RWF || grossRwf > TOPUP_MAX_RWF) {
-      throw new BadRequestException('Enter an amount between 500 and 500,000 RWF.');
+      throw new BadRequestException(
+        `Enter an amount between ${TOPUP_MIN_RWF.toLocaleString('en-US')} and ${TOPUP_MAX_RWF.toLocaleString('en-US')} RWF.`,
+      );
     }
     const { feeRwf, studentCreditRwf } = splitGross(grossRwf);
     if (studentCreditRwf < 1) {

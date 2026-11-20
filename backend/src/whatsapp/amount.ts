@@ -1,4 +1,4 @@
-export const TOPUP_MIN_RWF = 500;
+export const TOPUP_MIN_RWF = 100;
 export const TOPUP_MAX_RWF = 500_000;
 
 const SMALL: Record<string, number> = {
